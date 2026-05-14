@@ -5,6 +5,7 @@ import os
 import gradio as gr
 import torch
 from huggingface_hub import HfApi, login
+from huggingface_hub.errors import HfHubHTTPError
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
@@ -26,13 +27,18 @@ SYSTEM_PROMPT = os.getenv(
 
 MODEL = None
 TOKENIZER = None
+AUTHENTICATED_USER = None
+AUTH_ERROR = None
 
 
 if HF_TOKEN:
-    login(token=HF_TOKEN)
-    AUTHENTICATED_USER = HfApi().whoami(token=HF_TOKEN)["name"]
-else:
-    AUTHENTICATED_USER = None
+    try:
+        login(token=HF_TOKEN)
+        AUTHENTICATED_USER = HfApi().whoami(token=HF_TOKEN)["name"]
+    except HfHubHTTPError as exc:
+        AUTH_ERROR = f"Invalid Hugging Face token in Space secret: {exc}"
+    except Exception as exc:
+        AUTH_ERROR = f"Unable to validate Hugging Face token: {exc}"
 
 
 def build_prompt(question: str) -> str:
@@ -49,6 +55,8 @@ def load_tokenizer(model_name: str):
         raise RuntimeError(
             "Missing Hugging Face token. Add a Space secret named HF_TOKEN or HUGGINGFACE_HUB_TOKEN."
         )
+    if AUTH_ERROR:
+        raise RuntimeError(AUTH_ERROR)
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, token=HF_TOKEN)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -61,6 +69,8 @@ def load_model(base_model: str, adapter_repo_id: str):
         raise RuntimeError(
             "Missing Hugging Face token. Add a Space secret named HF_TOKEN or HUGGINGFACE_HUB_TOKEN."
         )
+    if AUTH_ERROR:
+        raise RuntimeError(AUTH_ERROR)
     quantization_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
@@ -115,6 +125,12 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
     )
     if AUTHENTICATED_USER:
         gr.Markdown(f"Authenticated Hugging Face user: `{AUTHENTICATED_USER}`")
+    if AUTH_ERROR:
+        gr.Markdown(
+            "### Hugging Face authentication error\n"
+            f"{AUTH_ERROR}\n\n"
+            "Update the Space secret `HF_TOKEN` with the approved token for the account that has access to the gated model."
+        )
     gr.ChatInterface(
         fn=respond,
         title="Clinical Q&A Assistant",
