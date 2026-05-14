@@ -4,7 +4,7 @@ import os
 
 import gradio as gr
 import torch
-from huggingface_hub import login
+from huggingface_hub import HfApi, login
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
@@ -29,10 +29,10 @@ TOKENIZER = None
 
 
 if HF_TOKEN:
-    try:
-        login(token=HF_TOKEN)
-    except Exception:
-        pass
+    login(token=HF_TOKEN)
+    AUTHENTICATED_USER = HfApi().whoami(token=HF_TOKEN)["name"]
+else:
+    AUTHENTICATED_USER = None
 
 
 def build_prompt(question: str) -> str:
@@ -76,7 +76,7 @@ def load_model(base_model: str, adapter_repo_id: str):
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     )
     model.config.use_cache = False
-    return PeftModel.from_pretrained(model, adapter_repo_id)
+    return PeftModel.from_pretrained(model, adapter_repo_id, token=HF_TOKEN)
 
 
 def get_pipeline():
@@ -113,6 +113,8 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
         "A compact demo that answers everyday medical questions carefully and concisely.\n"
         "The model is for educational use only and should not replace professional advice."
     )
+    if AUTHENTICATED_USER:
+        gr.Markdown(f"Authenticated Hugging Face user: `{AUTHENTICATED_USER}`")
     gr.ChatInterface(
         fn=respond,
         title="Clinical Q&A Assistant",
