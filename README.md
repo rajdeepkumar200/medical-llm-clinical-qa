@@ -40,7 +40,7 @@ This demo is for research and educational use only. Medical answers should alway
 
 ## Required secret
 
-Set `HF_TOKEN` in the Space secrets so the gated Llama base model can be loaded.
+Set `HF_TOKEN` in the Space secrets so the gated Llama base model can be loaded. This app also accepts `HUGGINGFACE_HUB_TOKEN` or `HUGGINGFACE_TOKEN` if you prefer one of those names.
 
 ## Runtime note
 

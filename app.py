@@ -4,12 +4,17 @@ import os
 
 import gradio as gr
 import torch
+from huggingface_hub import login
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 BASE_MODEL = os.getenv("BASE_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
 ADAPTER_REPO_ID = os.getenv("ADAPTER_REPO_ID", "RajdeepSingh-ai/medical-llama-medical-qa")
-HF_TOKEN = os.getenv("HF_TOKEN")
+HF_TOKEN = (
+    os.getenv("HF_TOKEN")
+    or os.getenv("HUGGINGFACE_HUB_TOKEN")
+    or os.getenv("HUGGINGFACE_TOKEN")
+)
 MAX_NEW_TOKENS = int(os.getenv("MAX_NEW_TOKENS", "256"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
 TOP_P = float(os.getenv("TOP_P", "0.9"))
@@ -23,6 +28,13 @@ MODEL = None
 TOKENIZER = None
 
 
+if HF_TOKEN:
+    try:
+        login(token=HF_TOKEN)
+    except Exception:
+        pass
+
+
 def build_prompt(question: str) -> str:
     return (
         "<s>[INST] <<SYS>>\n"
@@ -33,6 +45,10 @@ def build_prompt(question: str) -> str:
 
 
 def load_tokenizer(model_name: str):
+    if not HF_TOKEN:
+        raise RuntimeError(
+            "Missing Hugging Face token. Add a Space secret named HF_TOKEN or HUGGINGFACE_HUB_TOKEN."
+        )
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, token=HF_TOKEN)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -41,6 +57,10 @@ def load_tokenizer(model_name: str):
 
 
 def load_model(base_model: str, adapter_repo_id: str):
+    if not HF_TOKEN:
+        raise RuntimeError(
+            "Missing Hugging Face token. Add a Space secret named HF_TOKEN or HUGGINGFACE_HUB_TOKEN."
+        )
     quantization_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
