@@ -5,6 +5,7 @@ colorFrom: blue
 colorTo: indigo
 sdk: gradio
 sdk_version: 4.44.1
+python_version: 3.11
 app_file: app.py
 pinned: false
 ---
@@ -40,3 +41,7 @@ This demo is for research and educational use only. Medical answers should alway
 ## Required secret
 
 Set `HF_TOKEN` in the Space secrets so the gated Llama base model can be loaded.
+
+## Runtime note
+
+This Space should run on Python 3.11. The error shown in the logs comes from Python 3.13 removing `audioop`, which Gradio/PyDub still expects in this environment.
