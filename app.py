@@ -131,16 +131,21 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
             f"{AUTH_ERROR}\n\n"
             "Update the Space secret `HF_TOKEN` with the approved token for the account that has access to the gated model."
         )
-    gr.ChatInterface(
-        fn=respond,
-        title="Clinical Q&A Assistant",
-        description="Ask a medical question and get a concise answer. Always verify important advice with a clinician.",
-        examples=[
-            "What are the common side effects of amoxicillin?",
-            "How do I recognize signs of dehydration in a child?",
-            "What is the first-line treatment for seasonal allergic rhinitis?",
-        ],
-    )
+    if not AUTH_ERROR:
+        gr.ChatInterface(
+            fn=respond,
+            title="Clinical Q&A Assistant",
+            description="Ask a medical question and get a concise answer. Always verify important advice with a clinician.",
+            examples=[
+                "What are the common side effects of amoxicillin?",
+                "How do I recognize signs of dehydration in a child?",
+                "What is the first-line treatment for seasonal allergic rhinitis?",
+            ],
+        )
+    else:
+        gr.Markdown(
+            "The chat demo is disabled until the Hugging Face token is fixed, because example caching would otherwise fail at startup."
+        )
 
 
 if __name__ == "__main__":

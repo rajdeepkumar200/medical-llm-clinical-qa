@@ -38,6 +38,8 @@ This is a smoke-test evaluation, not a clinical benchmark.
 
 This demo is for research and educational use only. Medical answers should always be reviewed by a qualified professional.
 
+Last refreshed to trigger a new Space build.
+
 ## Required secret
 
 Set `HF_TOKEN` in the Space secrets so the gated Llama base model can be loaded. This app also accepts `HUGGINGFACE_HUB_TOKEN` or `HUGGINGFACE_TOKEN` if you prefer one of those names.
