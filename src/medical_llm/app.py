@@ -77,7 +77,7 @@ def respond(message: str, history, region: str = REGION):
 
 
 def build_demo() -> gr.Blocks:
-    with gr.Blocks(title="Clinical Q&A Assistant", api_open=False) as demo:
+    with gr.Blocks(title="Clinical Q&A Assistant") as demo:
         gr.Markdown("""
         # Clinical Q&A Assistant
         Ask a medical question and get a concise, evidence-based answer tailored to your region's healthcare standards.
@@ -103,17 +103,6 @@ def build_demo() -> gr.Blocks:
             )
             submit = gr.Button("Submit", scale=1)
         
-        gr.Examples(
-            examples=[
-                ["What are the common side effects of amoxicillin?", "General"],
-                ["How do I recognize signs of dehydration in a child?", "General"],
-                ["What is the first-line treatment for seasonal allergic rhinitis?", "General"],
-            ],
-            inputs=[msg, region_selector],
-            label="Example Questions",
-            cache_examples=False
-        )
-        
         def respond_with_region(message, history, region):
             return respond(message, history, region)
         
@@ -137,6 +126,8 @@ def build_demo() -> gr.Blocks:
             inputs=[msg, region_selector, chatbot],
             outputs=[chatbot, msg]
         )
+        
+        demo.show_api = False
     return demo
 
 
