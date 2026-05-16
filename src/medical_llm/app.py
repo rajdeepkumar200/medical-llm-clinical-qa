@@ -31,6 +31,46 @@ REGIONS = [
     "Other",
 ]
 
+# ISO country code → user-friendly region name used by the prompt builder
+COUNTRY_TO_REGION = {
+    "US": "United States",
+    "GB": "United Kingdom", "UK": "United Kingdom",
+    "CA": "Canada",
+    "AU": "Australia",
+    "NZ": "New Zealand",
+    "IN": "India",
+    "SG": "Singapore",
+    "HK": "Hong Kong",
+}
+
+
+def detect_region(request) -> str:
+    """Auto-detect a user's region from the browser Accept-Language header.
+
+    Falls back to "General" when nothing useful is available. We deliberately
+    avoid external IP-geolocation calls to keep startup fast and offline-safe.
+    """
+    if request is None:
+        return "General"
+    try:
+        headers = getattr(request, "headers", {}) or {}
+        accept_lang = ""
+        # gr.Request.headers can be a dict-like
+        if hasattr(headers, "get"):
+            accept_lang = headers.get("accept-language", "") or headers.get(
+                "Accept-Language", ""
+            )
+        else:
+            accept_lang = str(headers)
+        accept_lang = accept_lang.upper()
+        for code, region in COUNTRY_TO_REGION.items():
+            if f"-{code}" in accept_lang or f"_{code}" in accept_lang:
+                return region
+    except Exception as e:
+        logger.warning(f"Region detection failed: {e}")
+    return "General"
+
+
 EXAMPLE_PROMPTS = [
     "I have a sore throat and mild fever for 2 days. What should I do?",
     "Explain my lab report values: hemoglobin 10.2, ferritin 8, TSH 5.4.",
@@ -247,8 +287,11 @@ footer { display: none !important; }
 }
 .send-btn button:hover, button.send-btn:hover { filter: brightness(0.95); }
 
-#region-row { max-width: 720px; width: 100%; margin: 16px auto 0 auto; }
-#region-row label span { color: var(--ink-soft) !important; font-size: 0.85rem !important; }
+#region-badge {
+    max-width: 720px; width: 100%; margin: 14px auto 0 auto;
+    text-align: center; color: var(--ink-soft); font-size: 0.85rem;
+}
+#region-badge strong { color: var(--accent); }
 
 #examples-row {
     max-width: 720px; width: 100%; margin: 24px auto 0 auto;
@@ -372,11 +415,12 @@ def build_demo():
                         "➤", elem_classes=["send-btn"]
                     )
 
-            with gr.Row(elem_id="region-row"):
-                region_selector = gr.Dropdown(
-                    REGIONS, value=REGION, label="Region (for local guidance)",
-                    interactive=True,
-                )
+            # Detected region badge (auto-filled on app load)
+            region_state = gr.State(REGION)
+            region_badge = gr.Markdown(
+                "📍 Detecting your region…",
+                elem_id="region-badge",
+            )
 
             with gr.Row(elem_id="examples-row"):
                 example_btns = [
@@ -435,8 +479,15 @@ def build_demo():
                 display_name = "uploaded file"
             return path, f"📎 Attached: **{display_name}**"
 
-        def submit_message(message, region_val, history, pending_file):
+        def submit_message(message, region_val, history, pending_file, request: gr.Request):
             """Submit from the welcome view (also covers follow-ups)."""
+            # Re-detect region from the live request in case state was stale.
+            detected = detect_region(request)
+            if detected and detected != "General":
+                region_val = detected
+            elif not region_val:
+                region_val = "General"
+
             message = (message or "").strip()
             if not message and not pending_file:
                 return (
@@ -518,45 +569,74 @@ def build_demo():
 
         welcome_send.click(
             fn=submit_message,
-            inputs=[welcome_input, region_selector, history_state, pending_file_state],
+            inputs=[welcome_input, region_state, history_state, pending_file_state],
             outputs=submit_outputs,
+            api_name=False,
         )
         welcome_input.submit(
             fn=submit_message,
-            inputs=[welcome_input, region_selector, history_state, pending_file_state],
+            inputs=[welcome_input, region_state, history_state, pending_file_state],
             outputs=submit_outputs,
+            api_name=False,
         )
         chat_send.click(
             fn=submit_message,
-            inputs=[chat_input, region_selector, history_state, pending_file_state],
+            inputs=[chat_input, region_state, history_state, pending_file_state],
             outputs=submit_outputs,
+            api_name=False,
         )
         chat_input.submit(
             fn=submit_message,
-            inputs=[chat_input, region_selector, history_state, pending_file_state],
+            inputs=[chat_input, region_state, history_state, pending_file_state],
             outputs=submit_outputs,
+            api_name=False,
         )
 
         welcome_upload.upload(
             fn=on_upload,
             inputs=[welcome_upload],
             outputs=[pending_file_state, welcome_attach_status],
+            api_name=False,
         )
         chat_upload.upload(
             fn=on_upload,
             inputs=[chat_upload],
             outputs=[pending_file_state, chat_attach_status],
+            api_name=False,
         )
 
-        new_chat_btn.click(fn=reset_chat, outputs=submit_outputs)
+        new_chat_btn.click(fn=reset_chat, outputs=submit_outputs, api_name=False)
 
         for btn in example_btns:
-            btn.click(fn=fill_example, inputs=[btn], outputs=[welcome_input])
+            btn.click(fn=fill_example, inputs=[btn], outputs=[welcome_input], api_name=False)
 
-        region_selector.change(fn=update_region, inputs=[region_selector])
+        # Auto-detect region on app load and update both the badge + state
+        def _init_region(request: gr.Request):
+            region = detect_region(request)
+            global CURRENT_REGION
+            CURRENT_REGION = region
+            label = (
+                f"📍 Region auto-detected: **{region}**"
+                if region != "General"
+                else "📍 Region: **General** (no local preference detected)"
+            )
+            return region, label
+
+        demo.load(
+            fn=_init_region,
+            inputs=None,
+            outputs=[region_state, region_badge],
+            api_name=False,
+        )
 
     return demo
 
 
 if __name__ == "__main__":
-    build_demo().launch(share=bool(os.getenv("SPACE_ID") or os.getenv("SPACE_HOST")))
+    in_space = bool(os.getenv("SPACE_ID") or os.getenv("SPACE_HOST"))
+    # show_api=False avoids the gradio_client schema-generation bug that
+    # crashed earlier on /info, and we don't expose this app as an API anyway.
+    build_demo().queue().launch(
+        share=False if in_space else True,
+        show_api=False,
+    )
