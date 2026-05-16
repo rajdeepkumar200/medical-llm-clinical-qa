@@ -68,50 +68,29 @@ def update_region(region: str):
 
 
 def build_demo():
-    """Build Claude-style UI with left sidebar and main chat area."""
+    """Build minimal professional UI - avoids Gradio 4.36.0 schema issues."""
     with gr.Blocks(title="Clinical AI Assistant") as demo:
-        with gr.Row():
-            # LEFT SIDEBAR - Chat history
-            with gr.Column(scale=2):
-                gr.Markdown("## 📋 Chat History")
-                gr.Button("➕ New Chat")
-                gr.Markdown("---")
-                gr.Markdown("Recent conversations:")
-                gr.Textbox(value="Chat 1", interactive=False)
-                gr.Textbox(value="Chat 2", interactive=False)
-                gr.Textbox(value="Chat 3", interactive=False)
-                gr.Markdown("---")
-                region_selector = gr.Dropdown(REGIONS, value=REGION, label="🌍 Region")
-            
-            # RIGHT MAIN AREA - Chat interface
-            with gr.Column(scale=5):
-                gr.Markdown("# 🏥 Clinical AI Assistant")
-                gr.Markdown("*Medical guidance with region awareness*")
-                
-                # Chat display
-                chatbot = gr.Chatbot(height=500, label="")
-                
-                # Hidden file state
-                file_state = gr.State(None)
-                
-                # Input area - like Claude with + button
-                with gr.Row():
-                    upload_btn = gr.Button("➕", scale=1)
-                    msg_input = gr.Textbox(
-                        placeholder="Ask about symptoms, medications, conditions...",
-                        lines=2,
-                        scale=9
-                    )
-                
-                # Disclaimer
-                gr.Markdown("⚠️ **For educational use.** Always consult healthcare professionals.")
+        # Header
+        gr.Markdown("# 🏥 Clinical AI Assistant")
+        gr.Markdown("*Medical guidance with region awareness*")
         
-        def handle_upload(chat_hist):
-            """Placeholder for file upload handler."""
-            return chat_hist, None
+        # Region selector (no scale)
+        region_selector = gr.Dropdown(REGIONS, value=REGION, label="Region")
+        
+        # Chat display
+        chatbot = gr.Chatbot()
+        
+        # Input area - simple layout
+        msg_input = gr.Textbox(placeholder="Ask about your health...", lines=3)
+        gr.Markdown("💡 Press Enter or click the button below to submit. Add photo with ➕ button")
+        submit_btn = gr.Button("🔍 Submit", variant="primary")
+        upload_btn = gr.Button("➕ Upload Lab Report/Photo")
+        
+        # Disclaimer
+        gr.Markdown("⚠️ **For educational use only.** Always consult healthcare professionals.")
         
         def process_and_respond(message, region_val, chat_hist):
-            """Process message and generate response on Enter."""
+            """Process message and generate response."""
             if not message.strip():
                 return chat_hist, ""
             
@@ -131,6 +110,13 @@ def build_demo():
                 chat_hist.append([message, error_msg])
                 return chat_hist, ""
         
+        # Event: Submit button
+        submit_btn.click(
+            fn=process_and_respond,
+            inputs=[msg_input, region_selector, chatbot],
+            outputs=[chatbot, msg_input]
+        )
+        
         # Event: Enter key submits
         msg_input.submit(
             fn=process_and_respond,
@@ -138,9 +124,9 @@ def build_demo():
             outputs=[chatbot, msg_input]
         )
         
-        # Event: + button shows file upload (placeholder)
+        # Event: Upload button
         upload_btn.click(
-            fn=lambda: gr.Info("File upload feature coming soon"),
+            fn=lambda: print("Upload clicked"),
             outputs=None
         )
         
