@@ -1,3 +1,15 @@
+---
+title: Medical Clinical Q&A
+emoji: ⚕️
+colorFrom: blue
+colorTo: green
+sdk: gradio
+sdk_version: "4.36.0"
+python_version: "3.11"
+app_file: app.py
+pinned: false
+---
+
 # Medical Llama Clinical Q&A
 
 I built this project as a compact, practical demo of LLM fine-tuning and deployment. It uses `meta-llama/Llama-3.2-1B-Instruct` with 4-bit QLoRA, PEFT, and TRL, then serves the result through a small Gradio chat app.
