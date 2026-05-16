@@ -68,63 +68,57 @@ def update_region(region: str):
 
 
 def build_demo():
-    """Build Claude-style medical assistant UI."""
+    """Build Claude-style UI with left sidebar and main chat area."""
     with gr.Blocks(title="Clinical AI Assistant") as demo:
-        # Header
-        gr.Markdown("# 🏥 Clinical AI Assistant")
-        gr.Markdown("*Ask medical questions, upload lab reports - get region-aware guidance*")
-        
-        # Region selector
         with gr.Row():
-            region_selector = gr.Dropdown(REGIONS, value=REGION, label="Region")
-        
-        # Disclaimer
-        gr.Markdown("⚠️ **For educational use only.** Always consult healthcare professionals.")
-        
-        # Chat display (full height like Claude)
-        chatbot = gr.Chatbot(height=600, label="")
-        
-        # Input area - Claude style
-        with gr.Row():
-            upload_btn = gr.UploadButton(
-                "➕",
-                file_count="single",
-                file_types=["text", ".pdf", ".png", ".jpg", ".jpeg"],
-                scale=1
-            )
-            msg_input = gr.Textbox(
-                placeholder="Ask a medical question...",
-                lines=1,
-                scale=10
-            )
-            submit_btn = gr.Button("Send", scale=1)
-        
-        def process_and_respond(message, uploaded_file, region_val, chat_hist):
-            """Process message with optional file and generate response."""
-            full_message = message
+            # LEFT SIDEBAR - Chat history
+            with gr.Column(scale=2):
+                gr.Markdown("## 📋 Chat History")
+                gr.Button("➕ New Chat")
+                gr.Markdown("---")
+                gr.Markdown("Recent conversations:")
+                gr.Textbox(value="Chat 1", interactive=False)
+                gr.Textbox(value="Chat 2", interactive=False)
+                gr.Textbox(value="Chat 3", interactive=False)
+                gr.Markdown("---")
+                region_selector = gr.Dropdown(REGIONS, value=REGION, label="🌍 Region")
             
-            # Handle file upload
-            if uploaded_file is not None:
-                try:
-                    file_path = uploaded_file if isinstance(uploaded_file, str) else getattr(uploaded_file, 'name', str(uploaded_file))
-                    if file_path.endswith('.txt'):
-                        with open(file_path, 'r') as f:
-                            file_content = f.read()
-                        full_message = f"{message}\n\n[LAB REPORT]\n{file_content}"
-                    else:
-                        file_type = file_path.split('.')[-1].upper()
-                        full_message = f"{message}\n\n[{file_type} file uploaded for analysis]"
-                except Exception as e:
-                    logger.error(f"Error reading file: {e}")
-                    full_message = message or "Error reading file"
-            
-            if not full_message.strip():
+            # RIGHT MAIN AREA - Chat interface
+            with gr.Column(scale=5):
+                gr.Markdown("# 🏥 Clinical AI Assistant")
+                gr.Markdown("*Medical guidance with region awareness*")
+                
+                # Chat display
+                chatbot = gr.Chatbot(height=500, label="")
+                
+                # Hidden file state
+                file_state = gr.State(None)
+                
+                # Input area - like Claude with + button
+                with gr.Row():
+                    upload_btn = gr.Button("➕", scale=1)
+                    msg_input = gr.Textbox(
+                        placeholder="Ask about symptoms, medications, conditions...",
+                        lines=2,
+                        scale=9
+                    )
+                
+                # Disclaimer
+                gr.Markdown("⚠️ **For educational use.** Always consult healthcare professionals.")
+        
+        def handle_upload(chat_hist):
+            """Placeholder for file upload handler."""
+            return chat_hist, None
+        
+        def process_and_respond(message, region_val, chat_hist):
+            """Process message and generate response on Enter."""
+            if not message.strip():
                 return chat_hist, ""
             
             try:
                 # Generate response
                 response = ""
-                for chunk in generate_response(full_message, region_val):
+                for chunk in generate_response(message, region_val):
                     response += chunk
                 
                 # Add to chat history
@@ -137,19 +131,20 @@ def build_demo():
                 chat_hist.append([message, error_msg])
                 return chat_hist, ""
         
-        # Event handlers
-        submit_btn.click(
-            fn=process_and_respond,
-            inputs=[msg_input, upload_btn, region_selector, chatbot],
-            outputs=[chatbot, msg_input]
-        )
-        
+        # Event: Enter key submits
         msg_input.submit(
             fn=process_and_respond,
-            inputs=[msg_input, upload_btn, region_selector, chatbot],
+            inputs=[msg_input, region_selector, chatbot],
             outputs=[chatbot, msg_input]
         )
         
+        # Event: + button shows file upload (placeholder)
+        upload_btn.click(
+            fn=lambda: gr.Info("File upload feature coming soon"),
+            outputs=None
+        )
+        
+        # Event: Region change
         region_selector.change(fn=update_region, inputs=[region_selector])
     
     return demo
