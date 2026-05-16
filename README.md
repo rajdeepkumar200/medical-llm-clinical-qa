@@ -12,7 +12,7 @@ pinned: false
 
 # Medical Llama Clinical Q&A
 
-I built this project as a compact, practical demo of LLM fine-tuning and deployment. It uses `meta-llama/Llama-3.2-1B-Instruct` with 4-bit QLoRA, PEFT, and TRL, then serves the result through a small Gradio chat app.
+I built this project as a compact, practical demo of LLM fine-tuning and deployment. It uses `TinyLlama-1.1B-Chat-v1.0` with 4-bit QLoRA, PEFT, and TRL, then serves the result through a small Gradio chat app.
 
 ## What’s in the repo
 

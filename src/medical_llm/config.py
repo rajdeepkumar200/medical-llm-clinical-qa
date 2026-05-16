@@ -2,12 +2,12 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 
-BASE_MODEL = os.getenv("BASE_MODEL", "meta-llama/Llama-3.2-1B-Instruct")
+BASE_MODEL = os.getenv("BASE_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 DATASET_NAME = os.getenv("DATASET_NAME", "medalpaca/medalpaca-40k")
 DATASET_SPLIT = os.getenv("DATASET_SPLIT", "train")
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "outputs/medical-llama-medical-qa"))
-ADAPTER_DIR = Path(os.getenv("ADAPTER_DIR", "adapters/medical-llama-medical-qa"))
-ADAPTER_REPO_ID = os.getenv("ADAPTER_REPO_ID", "RajdeepSingh-ai/medical-llama-medical-qa")
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "outputs/medical-tinyllama-medical-qa"))
+ADAPTER_DIR = Path(os.getenv("ADAPTER_DIR", "adapters/medical-tinyllama-medical-qa"))
+ADAPTER_REPO_ID = os.getenv("ADAPTER_REPO_ID", "RajdeepSingh-ai/medical-tinyllama-medical-qa")
 MAX_SEQ_LENGTH = int(os.getenv("MAX_SEQ_LENGTH", "1024"))
 MAX_NEW_TOKENS = int(os.getenv("MAX_NEW_TOKENS", "256"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.2"))
