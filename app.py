@@ -156,6 +156,6 @@ with gr.Blocks() as demo:
 
 if __name__ == "__main__":
     if os.getenv("SPACE_ID") or os.getenv("SPACE_HOST") or os.getenv("SPACE_REPO_ID"):
-        demo.launch()
+        demo.launch(share=True)
     else:
-        demo.launch(server_name="0.0.0.0", server_port=int(os.getenv("PORT", "7860")))
+        demo.launch(share=True, server_name="0.0.0.0", server_port=int(os.getenv("PORT", "7860")))
