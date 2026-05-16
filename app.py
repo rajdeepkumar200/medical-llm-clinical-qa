@@ -117,7 +117,14 @@ def respond(message: str, history):
     return answer
 
 
-with gr.Blocks(theme=gr.themes.Soft()) as demo:
+def submit_message(message: str, history: list[list[str]]):
+    history = history or []
+    answer = respond(message, history)
+    history.append([message, answer])
+    return "", history
+
+
+with gr.Blocks() as demo:
     gr.Markdown(
         "# Medical Llama Clinical Q&A\n"
         "A compact demo that answers everyday medical questions carefully and concisely.\n"
@@ -132,21 +139,20 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
             "Update the Space secret `HF_TOKEN` with the approved token for the account that has access to the gated model."
         )
     if not AUTH_ERROR:
-        gr.ChatInterface(
-            fn=respond,
-            title="Clinical Q&A Assistant",
-            description="Ask a medical question and get a concise answer. Always verify important advice with a clinician.",
-            examples=[
-                "What are the common side effects of amoxicillin?",
-                "How do I recognize signs of dehydration in a child?",
-                "What is the first-line treatment for seasonal allergic rhinitis?",
-            ],
+        chatbot = gr.Chatbot(label="Clinical Q&A Assistant", height=420)
+        message = gr.Textbox(
+            label="Your question",
+            placeholder="Ask a medical question...",
+            lines=2,
         )
+        send = gr.Button("Send")
+        message.submit(submit_message, inputs=[message, chatbot], outputs=[message, chatbot])
+        send.click(submit_message, inputs=[message, chatbot], outputs=[message, chatbot])
     else:
         gr.Markdown(
-            "The chat demo is disabled until the Hugging Face token is fixed, because example caching would otherwise fail at startup."
+            "The chat demo is disabled until the Hugging Face token is fixed."
         )
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(server_name="0.0.0.0", server_port=int(os.getenv("PORT", "7860")))
