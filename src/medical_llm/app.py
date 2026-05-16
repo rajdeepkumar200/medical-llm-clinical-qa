@@ -36,10 +36,8 @@ def get_pipeline():
     return MODEL, TOKENIZER
 
 
-def generate_response(message: str, history: list) -> Generator[str, None, None]:
+def generate_response(message: str, region: str) -> Generator[str, None, None]:
     """Generate medical response as a stream."""
-    global CURRENT_REGION
-    
     if not message.strip():
         yield ""
         return
@@ -52,8 +50,8 @@ def generate_response(message: str, history: list) -> Generator[str, None, None]
         enhanced_message = build_context_prompt(nlp_result, message)
         
         # Generate response
-        logger.info(f"Generating answer (Region: {CURRENT_REGION})")
-        response = generate_answer(model, tokenizer, enhanced_message, region=CURRENT_REGION)
+        logger.info(f"Generating answer (Region: {region})")
+        response = generate_answer(model, tokenizer, enhanced_message, region=region)
         logger.info("Answer generated successfully")
         
         yield response
@@ -70,21 +68,86 @@ def update_region(region: str):
 
 
 def build_demo():
-    """Build medical assistant UI using ChatInterface."""
+    """Build Claude-style medical assistant UI."""
     with gr.Blocks(title="Clinical AI Assistant") as demo:
+        # Header
         gr.Markdown("# 🏥 Clinical AI Assistant")
-        gr.Markdown("Ask medical questions, upload reports, get region-aware guidance")
+        gr.Markdown("*Ask medical questions, upload lab reports - get region-aware guidance*")
         
+        # Region selector
         with gr.Row():
-            region_selector = gr.Dropdown(REGIONS, value=REGION, label="Region", scale=2)
+            region_selector = gr.Dropdown(REGIONS, value=REGION, label="Region")
         
+        # Disclaimer
         gr.Markdown("⚠️ **For educational use only.** Always consult healthcare professionals.")
         
-        chat_interface = gr.ChatInterface(
-            fn=generate_response,
-            examples=["What are symptoms of flu?", "I have a headache and fever"],
-            title="",
-            description=""
+        # Chat display (full height like Claude)
+        chatbot = gr.Chatbot(height=600, label="")
+        
+        # Input area - Claude style
+        with gr.Row():
+            upload_btn = gr.UploadButton(
+                "➕",
+                file_count="single",
+                file_types=["text", ".pdf", ".png", ".jpg", ".jpeg"],
+                scale=1
+            )
+            msg_input = gr.Textbox(
+                placeholder="Ask a medical question...",
+                lines=1,
+                scale=10
+            )
+            submit_btn = gr.Button("Send", scale=1)
+        
+        def process_and_respond(message, uploaded_file, region_val, chat_hist):
+            """Process message with optional file and generate response."""
+            full_message = message
+            
+            # Handle file upload
+            if uploaded_file is not None:
+                try:
+                    file_path = uploaded_file if isinstance(uploaded_file, str) else getattr(uploaded_file, 'name', str(uploaded_file))
+                    if file_path.endswith('.txt'):
+                        with open(file_path, 'r') as f:
+                            file_content = f.read()
+                        full_message = f"{message}\n\n[LAB REPORT]\n{file_content}"
+                    else:
+                        file_type = file_path.split('.')[-1].upper()
+                        full_message = f"{message}\n\n[{file_type} file uploaded for analysis]"
+                except Exception as e:
+                    logger.error(f"Error reading file: {e}")
+                    full_message = message or "Error reading file"
+            
+            if not full_message.strip():
+                return chat_hist, ""
+            
+            try:
+                # Generate response
+                response = ""
+                for chunk in generate_response(full_message, region_val):
+                    response += chunk
+                
+                # Add to chat history
+                chat_hist.append([message, response])
+                return chat_hist, ""
+                
+            except Exception as e:
+                logger.error(f"Error: {e}", exc_info=True)
+                error_msg = f"⚠️ Error: {str(e)[:150]}"
+                chat_hist.append([message, error_msg])
+                return chat_hist, ""
+        
+        # Event handlers
+        submit_btn.click(
+            fn=process_and_respond,
+            inputs=[msg_input, upload_btn, region_selector, chatbot],
+            outputs=[chatbot, msg_input]
+        )
+        
+        msg_input.submit(
+            fn=process_and_respond,
+            inputs=[msg_input, upload_btn, region_selector, chatbot],
+            outputs=[chatbot, msg_input]
         )
         
         region_selector.change(fn=update_region, inputs=[region_selector])
