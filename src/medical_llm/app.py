@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import os
-import json
 import logging
-from pathlib import Path
+from typing import Optional
 
 import gradio as gr  # type: ignore[import-not-found]
 
@@ -12,40 +11,22 @@ from .infer import generate_answer, load_model, load_tokenizer
 from .prompts import build_region_aware_system_prompt
 from .nlp_processor import process_user_input, build_context_prompt
 
-# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 MODEL = None
 TOKENIZER = None
 
-SUPPORTED_REGIONS = [
-    "General", "United States", "United Kingdom", "Canada",
-    "Australia", "New Zealand", "India", "Singapore", "Hong Kong", "Other"
-]
+REGIONS = ["General", "United States", "United Kingdom", "Canada", "Australia", "New Zealand", "India", "Singapore", "Hong Kong", "Other"]
 
 
 def get_pipeline():
-    """Load model and tokenizer on first call."""
     global MODEL, TOKENIZER
     if MODEL is None or TOKENIZER is None:
         try:
             logger.info(f"Loading tokenizer for {BASE_MODEL}...")
             TOKENIZER = load_tokenizer(BASE_MODEL)
-            
-            adapter_source = None
-            if ADAPTER_REPO_ID:
-                logger.info(f"Attempting to load adapter from HF repo: {ADAPTER_REPO_ID}")
-                try:
-                    adapter_source = ADAPTER_REPO_ID
-                except Exception as e:
-                    logger.warning(f"Failed to load from {ADAPTER_REPO_ID}: {e}")
-                    adapter_source = None
-            
-            if not adapter_source and ADAPTER_DIR.exists():
-                logger.info(f"Falling back to local adapter directory: {ADAPTER_DIR}")
-                adapter_source = str(ADAPTER_DIR)
-            
+            adapter_source = ADAPTER_REPO_ID if ADAPTER_REPO_ID else (str(ADAPTER_DIR) if ADAPTER_DIR.exists() else None)
             logger.info(f"Loading model from {BASE_MODEL} with adapter: {adapter_source}...")
             MODEL = load_model(BASE_MODEL, adapter_source)
             logger.info("Model loaded successfully")
@@ -55,199 +36,121 @@ def get_pipeline():
     return MODEL, TOKENIZER
 
 
-def answer_question(question: str, region: str, history: list) -> tuple[list, str]:
-    """Generate answer with enhanced NLP context."""
-    if not question.strip():
-        return history, ""
+def process_message(message: str, file_obj: Optional[object], region: str, history: list) -> tuple[list, str, None]:
+    """Process user message and return updated history."""
+    
+    # Handle file upload
+    if file_obj is not None:
+        try:
+            file_path = file_obj.name
+            if file_path.endswith('.txt'):
+                with open(file_path, 'r') as f:
+                    file_content = f.read()
+            else:
+                file_content = f"[{file_path.split('.')[-1].upper()} file uploaded]"
+            
+            message = f"{message}\n\n[DOCUMENT]\n{file_content}" if message.strip() else f"Please analyze this document:\n{file_content}"
+        except Exception as e:
+            logger.error(f"Error reading file: {e}")
+            message = message or "Error reading file"
+    
+    if not message.strip():
+        return history, "", None
     
     try:
-        # Process input with NLP
-        nlp_result = process_user_input(question)
-        enhanced_question = build_context_prompt(nlp_result, question)
+        # Get pipeline
+        model, tokenizer = get_pipeline()
+        
+        # Process with NLP
+        nlp_result = process_user_input(message)
+        enhanced_message = build_context_prompt(nlp_result, message)
         
         # Generate response
-        model, tokenizer = get_pipeline()
-        logger.info(f"Generating answer for: {question[:50]}... (Region: {region})")
-        response = generate_answer(model, tokenizer, enhanced_question, region=region)
+        logger.info(f"Generating answer (Region: {region})")
+        response = generate_answer(model, tokenizer, enhanced_message, region=region)
         logger.info("Answer generated successfully")
         
-        # Add to history
-        history.append({"role": "user", "content": question})
-        history.append({"role": "assistant", "content": response})
+        # Update history
+        history.append([message, response])
+        return history, "", None
         
-        return history, ""
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
-        error_msg = f"Error: {str(e)[:200]}"
-        history.append({"role": "user", "content": question})
-        history.append({"role": "assistant", "content": error_msg})
-        return history, ""
-
-
-def extract_text_from_file(file_path: str) -> str:
-    """Extract text from uploaded file (txt, pdf placeholder)."""
-    try:
-        if file_path.endswith('.txt'):
-            with open(file_path, 'r') as f:
-                return f.read()
-        elif file_path.endswith('.pdf'):
-            return "[PDF detected - OCR would be used in production. For now, please describe the report.]"
-        elif file_path.endswith(('.png', '.jpg', '.jpeg')):
-            return "[Image detected - Medical image analysis would be used in production. For now, please describe what you see.]"
-        else:
-            return "[File format not supported yet. Please describe the content.]"
-    except Exception as e:
-        logger.error(f"Error reading file: {e}")
-        return f"Error reading file: {str(e)}"
-
-
-def process_file_upload(file_obj, region: str, history: list) -> tuple[list, str]:
-    """Process uploaded file (lab report, prescription, image)."""
-    if file_obj is None:
-        return history, ""
-    
-    try:
-        file_path = file_obj.name
-        file_content = extract_text_from_file(file_path)
-        
-        prompt = f"""I have uploaded a medical document/image. Here's what I can extract from it:
-
-{file_content}
-
-Based on this document, please:
-1. Identify any mentioned conditions, symptoms, or findings
-2. Suggest what tests or treatments might be recommended
-3. Provide general guidance on next steps (noting this requires professional review)
-
-Always remind the user to consult with a healthcare professional."""
-        
-        return answer_question(prompt, region, history)
-    except Exception as e:
-        logger.error(f"Error processing file: {e}", exc_info=True)
-        error_msg = f"Error processing file: {str(e)[:200]}"
-        history.append({"role": "assistant", "content": error_msg})
-        return history, ""
+        error_msg = f"⚠️ Error: {str(e)[:150]}"
+        history.append([message, error_msg])
+        return history, "", None
 
 
 def build_demo() -> gr.Blocks:
-    """Build ChatGPT-like medical Q&A interface."""
-    with gr.Blocks(title="Clinical AI Assistant", theme=gr.themes.Soft()) as demo:
+    """Build ChatGPT-style medical assistant UI."""
+    with gr.Blocks(title="Clinical AI Assistant", theme=gr.themes.Soft(), css="""
+    #chat_box { height: 500px; overflow-y: auto; }
+    .message-box { padding: 16px; }
+    footer { display: none; }
+    """) as demo:
+        
         # Header
-        gr.Markdown("""
-        # 🏥 Clinical AI Assistant
-        **Powered by Medical Fine-Tuned LLM**
+        gr.Markdown("# 🏥 Clinical AI Assistant\n*Powered by Medical LLM - Ask questions, upload reports, get region-aware guidance*")
         
-        Ask medical questions, upload lab reports, or describe symptoms. Get evidence-based guidance tailored to your region.
-        
-        ⚠️ **Disclaimer:** This is for educational purposes. Always consult healthcare professionals for diagnosis and treatment.
-        """)
-        
-        # Settings Row
+        # Region selector (compact)
         with gr.Row():
-            region_selector = gr.Dropdown(
-                choices=SUPPORTED_REGIONS,
-                value=REGION,
-                label="🌍 Select Your Region",
-                info="Responses will be tailored to your regional healthcare standards"
-            )
-            clear_btn = gr.Button("🗑️ Clear Conversation", scale=1)
+            region = gr.Dropdown(REGIONS, value=REGION, label="🌍 Region", scale=2)
+            gr.Markdown("**⚠️ For educational use. Consult healthcare professionals for diagnosis.**", scale=3)
         
         # Conversation display
-        chatbot_display = gr.Chatbot(
-            label="💬 Conversation",
-            height=400,
-            show_label=True
-        )
+        chatbot = gr.Chatbot(label="Conversation", height=450, show_label=False)
         
-        # Hidden state to store conversation history
-        history_state = gr.State([])
-        
-        # Input Section
-        gr.Markdown("### 📝 Ask Your Medical Question")
+        # Input area - designed like ChatGPT
         with gr.Row():
-            question_input = gr.Textbox(
-                placeholder="Describe your symptoms or ask a medical question...",
-                label="Your Question",
-                lines=3,
+            # Upload button with + sign
+            upload_btn = gr.UploadButton(
+                "➕",
+                file_count="single",
+                file_types=["text", ".pdf", ".png", ".jpg", ".jpeg"],
+                scale=1
+            )
+            
+            # Input textbox
+            msg_input = gr.Textbox(
+                placeholder="Ask a medical question or describe your symptoms...",
+                label=None,
+                lines=1,
+                scale=10,
                 show_label=False
             )
+            
+            # Submit button (pill-shaped search icon)
+            submit_btn = gr.Button("🔍", scale=1)
         
-        with gr.Row():
-            submit_btn = gr.Button("Send 📤", variant="primary", scale=2)
-            clear_input_btn = gr.Button("Clear ❌", scale=1)
+        # Hidden file state
+        file_state = gr.State(None)
         
-        # File upload section
-        gr.Markdown("### 📄 Optional: Upload Medical Documents")
-        with gr.Row():
-            file_upload = gr.File(
-                label="Upload Lab Report, Prescription, or Medical Image",
-                file_count="single",
-                file_types=["text", ".pdf", ".png", ".jpg", ".jpeg"]
-            )
-            upload_btn = gr.Button("Analyze Document 🔍", scale=1)
+        def handle_submit(user_msg, file_obj, region_val, chat_history):
+            return process_message(user_msg, file_obj, region_val, chat_history), "", None
         
-        # Processing indicator
-        gr.Markdown("*Loading indicator shows when response is being generated...*")
+        def handle_upload(files, chat_history):
+            if files:
+                file_state.value = files
+                return files
+            return None
         
-        def update_display(history_data):
-            """Convert history to chatbot display format."""
-            messages = []
-            i = 0
-            while i < len(history_data):
-                if i < len(history_data) and history_data[i]["role"] == "user":
-                    user_msg = history_data[i]["content"]
-                    bot_msg = ""
-                    if i + 1 < len(history_data) and history_data[i + 1]["role"] == "assistant":
-                        bot_msg = history_data[i + 1]["content"]
-                        i += 2
-                    else:
-                        i += 1
-                    messages.append([user_msg, bot_msg])
-                else:
-                    i += 1
-            return messages
-        
-        def clear_conversation():
-            """Clear conversation history."""
-            return [], [], ""
-        
-        def submit_question(question: str, region: str, hist):
-            """Handle question submission."""
-            new_hist, _ = answer_question(question, region, hist)
-            return update_display(new_hist), "", new_hist
-        
-        def handle_file_upload(file_obj, region: str, hist):
-            """Handle file upload."""
-            new_hist, _ = process_file_upload(file_obj, region, hist)
-            return update_display(new_hist), new_hist
-        
-        # Event handlers
+        # Events
         submit_btn.click(
-            fn=submit_question,
-            inputs=[question_input, region_selector, history_state],
-            outputs=[chatbot_display, question_input, history_state]
+            fn=handle_submit,
+            inputs=[msg_input, file_state, region, chatbot],
+            outputs=[chatbot, msg_input, file_state]
         )
         
-        question_input.submit(
-            fn=submit_question,
-            inputs=[question_input, region_selector, history_state],
-            outputs=[chatbot_display, question_input, history_state]
+        msg_input.submit(
+            fn=handle_submit,
+            inputs=[msg_input, file_state, region, chatbot],
+            outputs=[chatbot, msg_input, file_state]
         )
         
-        upload_btn.click(
-            fn=handle_file_upload,
-            inputs=[file_upload, region_selector, history_state],
-            outputs=[chatbot_display, history_state]
-        )
-        
-        clear_btn.click(
-            fn=clear_conversation,
-            outputs=[chatbot_display, history_state, question_input]
-        )
-        
-        clear_input_btn.click(
-            fn=lambda: "",
-            outputs=[question_input]
+        upload_btn.upload(
+            fn=handle_upload,
+            inputs=[upload_btn, chatbot],
+            outputs=[file_state]
         )
     
     return demo
