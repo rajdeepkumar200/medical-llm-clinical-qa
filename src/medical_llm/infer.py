@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from threading import Thread
+from typing import Iterable, Iterator
 
 import torch
 from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    TextIteratorStreamer,
+)
 
 from .config import BASE_MODEL, MAX_NEW_TOKENS, REPETITION_PENALTY, TEMPERATURE, TOP_P
 from .prompts import build_chat_prompt
@@ -44,8 +50,11 @@ def load_model(base_model: str = BASE_MODEL, adapter_path: str | None = None):
         device_map="auto",
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     )
-    model.config.use_cache = False
-    logger.info("Base model loaded successfully")
+    # KV cache is REQUIRED for fast inference. The training pipeline disables it
+    # for gradient checkpointing; we must turn it back on here.
+    model.config.use_cache = True
+    model.eval()
+    logger.info("Base model loaded successfully (use_cache=True, eval mode)")
 
     if adapter_path:
         try:
@@ -57,6 +66,53 @@ def load_model(base_model: str = BASE_MODEL, adapter_path: str | None = None):
             # Continue with base model if adapter fails
 
     return model
+
+
+@torch.inference_mode()
+def stream_answer(
+    model,
+    tokenizer,
+    question: str,
+    region: str = "General",
+    max_new_tokens: int = MAX_NEW_TOKENS,
+) -> Iterator[str]:
+    """Yield generated text incrementally so the UI can display tokens as they
+    arrive. Uses `TextIteratorStreamer` running the model on a background thread.
+    """
+    prompt = build_chat_prompt(question, region=region)
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+    streamer = TextIteratorStreamer(
+        tokenizer,
+        skip_prompt=True,
+        skip_special_tokens=True,
+        timeout=120.0,
+    )
+
+    # Greedy + low temperature: medical answers benefit from determinism, and
+    # greedy is meaningfully faster than sampling on CPU.
+    gen_kwargs = dict(
+        **inputs,
+        max_new_tokens=max_new_tokens,
+        do_sample=True,
+        temperature=TEMPERATURE,
+        top_p=TOP_P,
+        repetition_penalty=REPETITION_PENALTY,
+        eos_token_id=tokenizer.eos_token_id,
+        pad_token_id=tokenizer.pad_token_id,
+        streamer=streamer,
+        use_cache=True,
+    )
+
+    thread = Thread(target=model.generate, kwargs=gen_kwargs, daemon=True)
+    thread.start()
+
+    try:
+        for chunk in streamer:
+            if chunk:
+                yield chunk
+    finally:
+        thread.join(timeout=1.0)
 
 
 @torch.inference_mode()
@@ -80,6 +136,7 @@ def generate_answer(model, tokenizer, question: str, region: str = "General", ma
             repetition_penalty=REPETITION_PENALTY,
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.pad_token_id,
+            use_cache=True,
         )
         logger.info(f"Generation complete, output shape: {output_ids.shape}")
 

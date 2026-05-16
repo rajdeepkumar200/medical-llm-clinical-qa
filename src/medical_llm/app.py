@@ -8,7 +8,7 @@ from typing import Generator
 import gradio as gr  # type: ignore[import-not-found]
 
 from .config import BASE_MODEL, ADAPTER_REPO_ID, ADAPTER_DIR, REGION
-from .infer import generate_answer, load_model, load_tokenizer
+from .infer import generate_answer, load_model, load_tokenizer, stream_answer
 from .nlp_processor import process_user_input, build_context_prompt
 from .ocr import extract_text_from_file
 
@@ -103,7 +103,8 @@ def get_pipeline():
 
 
 def generate_response(message: str, region: str) -> Generator[str, None, None]:
-    """Generate medical response."""
+    """Stream the model response chunk-by-chunk so the UI can display tokens
+    as they arrive (massively improves perceived latency on CPU)."""
     if not message.strip():
         yield ""
         return
@@ -112,10 +113,10 @@ def generate_response(message: str, region: str) -> Generator[str, None, None]:
         model, tokenizer = get_pipeline()
         nlp_result = process_user_input(message)
         enhanced_message = build_context_prompt(nlp_result, message)
-        logger.info(f"Generating answer (Region: {region})")
-        response = generate_answer(model, tokenizer, enhanced_message, region=region)
-        logger.info("Answer generated successfully")
-        yield response
+        logger.info(f"Streaming answer (Region: {region})")
+        for chunk in stream_answer(model, tokenizer, enhanced_message, region=region):
+            yield chunk
+        logger.info("Stream finished")
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
         yield f"⚠️ **Error:** {str(e)[:200]}"
@@ -703,7 +704,7 @@ def build_demo():
             empty_chip = gr.update(value="", visible=False)
 
             if not message and not pending_file:
-                return (
+                yield (
                     gr.update(),  # welcome_block
                     gr.update(),  # chat_display
                     history,
@@ -712,6 +713,7 @@ def build_demo():
                     empty_chip,  # attach_chip
                     _render_sidebar(history),  # sidebar_history
                 )
+                return
 
             attachment_name = None
             full_msg = message
@@ -728,29 +730,54 @@ def build_demo():
                 "content": message or "(attached lab report)",
                 "attachment": attachment_name,
             })
+            # Reserve an empty assistant bubble that we'll fill as tokens stream in.
+            history.append({
+                "role": "assistant",
+                "content": "▍",
+                "attachment": None,
+            })
 
+            # First yield: hide welcome, show chat with the user message + empty
+            # assistant bubble. The user sees their message immediately.
+            yield (
+                gr.update(visible=False),  # welcome_block
+                gr.update(value=_render_conversation(history), visible=True),
+                history,
+                "",  # clear input
+                None,  # clear pending_file
+                empty_chip,
+                _render_sidebar(history),
+            )
+
+            # Stream tokens into the last assistant bubble.
             response_text = ""
             try:
                 for chunk in generate_response(full_msg, region_val):
                     response_text += chunk
+                    history[-1]["content"] = response_text + "▍"  # cursor caret
+                    yield (
+                        gr.update(visible=False),
+                        gr.update(value=_render_conversation(history), visible=True),
+                        history,
+                        "",
+                        None,
+                        empty_chip,
+                        _render_sidebar(history),
+                    )
             except Exception as e:
                 logger.error(f"Generation error: {e}", exc_info=True)
                 response_text = f"⚠️ **Error:** {str(e)[:200]}"
 
-            history.append({
-                "role": "assistant",
-                "content": response_text,
-                "attachment": None,
-            })
-
-            return (
-                gr.update(visible=False),  # hide welcome_block
-                gr.update(value=_render_conversation(history), visible=True),  # chat_display
+            # Final yield: drop the cursor caret and finalize.
+            history[-1]["content"] = response_text or "_(no response)_"
+            yield (
+                gr.update(visible=False),
+                gr.update(value=_render_conversation(history), visible=True),
                 history,
-                "",  # clear input
-                None,  # clear pending_file
-                empty_chip,  # clear attach_chip
-                _render_sidebar(history),  # update sidebar
+                "",
+                None,
+                empty_chip,
+                _render_sidebar(history),
             )
 
         def reset_chat():
