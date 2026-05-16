@@ -68,31 +68,38 @@ def update_region(region: str):
 
 
 def build_demo():
-    """Build minimal professional UI - avoids Gradio 4.36.0 schema issues."""
+    """Build minimal UI without Chatbot component (causes schema errors in Gradio 4.36.0)."""
     with gr.Blocks(title="Clinical AI Assistant") as demo:
         # Header
         gr.Markdown("# 🏥 Clinical AI Assistant")
         gr.Markdown("*Medical guidance with region awareness*")
         
-        # Region selector (no scale)
+        # Region selector
         region_selector = gr.Dropdown(REGIONS, value=REGION, label="Region")
         
-        # Chat display
-        chatbot = gr.Chatbot()
+        # Chat display as text (no schema issues)
+        chat_display = gr.Textbox(
+            value="Welcome! Ask about your health concerns.\n",
+            lines=15,
+            interactive=False
+        )
         
-        # Input area - simple layout
-        msg_input = gr.Textbox(placeholder="Ask about your health...", lines=3)
-        gr.Markdown("💡 Press Enter or click the button below to submit. Add photo with ➕ button")
-        submit_btn = gr.Button("🔍 Submit", variant="primary")
-        upload_btn = gr.Button("➕ Upload Lab Report/Photo")
+        # Input area
+        msg_input = gr.Textbox(placeholder="Ask about your health...", lines=2)
+        gr.Markdown("Press Enter to submit your question")
+        
+        # Buttons
+        with gr.Row():
+            submit_btn = gr.Button("🔍 Submit")
+            upload_btn = gr.Button("➕ Upload Lab Report")
         
         # Disclaimer
         gr.Markdown("⚠️ **For educational use only.** Always consult healthcare professionals.")
         
-        def process_and_respond(message, region_val, chat_hist):
+        def process_and_respond(message, region_val, chat_text):
             """Process message and generate response."""
             if not message.strip():
-                return chat_hist, ""
+                return chat_text, ""
             
             try:
                 # Generate response
@@ -100,28 +107,28 @@ def build_demo():
                 for chunk in generate_response(message, region_val):
                     response += chunk
                 
-                # Add to chat history
-                chat_hist.append([message, response])
-                return chat_hist, ""
+                # Update chat display
+                updated_chat = chat_text + f"\nYou: {message}\n\nAssistant: {response}\n" + "-"*50 + "\n"
+                return updated_chat, ""
                 
             except Exception as e:
                 logger.error(f"Error: {e}", exc_info=True)
                 error_msg = f"⚠️ Error: {str(e)[:150]}"
-                chat_hist.append([message, error_msg])
-                return chat_hist, ""
+                updated_chat = chat_text + f"\nYou: {message}\n\n{error_msg}\n" + "-"*50 + "\n"
+                return updated_chat, ""
         
         # Event: Submit button
         submit_btn.click(
             fn=process_and_respond,
-            inputs=[msg_input, region_selector, chatbot],
-            outputs=[chatbot, msg_input]
+            inputs=[msg_input, region_selector, chat_display],
+            outputs=[chat_display, msg_input]
         )
         
         # Event: Enter key submits
         msg_input.submit(
             fn=process_and_respond,
-            inputs=[msg_input, region_selector, chatbot],
-            outputs=[chatbot, msg_input]
+            inputs=[msg_input, region_selector, chat_display],
+            outputs=[chat_display, msg_input]
         )
         
         # Event: Upload button
