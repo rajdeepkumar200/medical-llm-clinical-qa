@@ -121,12 +121,6 @@ def build_demo() -> gr.Blocks:
             inputs=[msg_input, file_input, region, chatbot],
             outputs=[chatbot, msg_input]
         )
-        
-        upload_btn.upload(
-            fn=handle_upload,
-            inputs=[upload_btn, chatbot],
-            outputs=[file_state]
-        )
     
     return demo
 
