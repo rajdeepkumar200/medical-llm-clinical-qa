@@ -19,12 +19,18 @@ def load_tokenizer(model_name: str = BASE_MODEL):
 
 
 def load_model(base_model: str = BASE_MODEL, adapter_path: str | None = None):
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-    )
+    # Try 4-bit quantization if available; fall back to standard loading for Space/CPU environments
+    quantization_config = None
+    try:
+        if torch.cuda.is_available():
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+            )
+    except Exception:
+        pass  # Fall back to standard loading
 
     model = AutoModelForCausalLM.from_pretrained(
         base_model,

@@ -36,6 +36,7 @@ def build_demo() -> gr.Blocks:
             "How do I recognize signs of dehydration in a child?",
             "What is the first-line treatment for seasonal allergic rhinitis?",
         ],
+        cache_examples=False,  # Disable example caching to avoid model load on startup
     )
     # Disable API docs to avoid Gradio schema generation crash
     demo.show_api = False
