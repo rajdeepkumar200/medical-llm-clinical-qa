@@ -13,7 +13,7 @@ from transformers import (
     TextIteratorStreamer,
 )
 
-from .config import BASE_MODEL, MAX_NEW_TOKENS, REPETITION_PENALTY, TEMPERATURE, TOP_P
+from .config import BASE_MODEL, MAX_NEW_TOKENS, REPETITION_PENALTY
 from .prompts import build_chat_prompt
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ def stream_answer(
     """Yield generated text incrementally so the UI can display tokens as they
     arrive. Uses `TextIteratorStreamer` running the model on a background thread.
     """
-    prompt = build_chat_prompt(question, region=region)
+    prompt = build_chat_prompt(question, region=region, tokenizer=tokenizer)
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
     streamer = TextIteratorStreamer(
@@ -89,14 +89,13 @@ def stream_answer(
         timeout=120.0,
     )
 
-    # Greedy + low temperature: medical answers benefit from determinism, and
-    # greedy is meaningfully faster than sampling on CPU.
+    # Greedy decoding: factual medical answers benefit from determinism, and
+    # greedy is meaningfully faster on CPU than sampling (no softmax + multinomial
+    # per token). This also dramatically reduces hallucination on the 1B model.
     gen_kwargs = dict(
         **inputs,
         max_new_tokens=max_new_tokens,
-        do_sample=True,
-        temperature=TEMPERATURE,
-        top_p=TOP_P,
+        do_sample=False,
         repetition_penalty=REPETITION_PENALTY,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
@@ -119,20 +118,18 @@ def stream_answer(
 def generate_answer(model, tokenizer, question: str, region: str = "General", max_new_tokens: int = MAX_NEW_TOKENS) -> str:
     try:
         logger.info(f"Building prompt for question: {question[:50]}... (Region: {region})")
-        prompt = build_chat_prompt(question, region=region)
+        prompt = build_chat_prompt(question, region=region, tokenizer=tokenizer)
         logger.info(f"Prompt: {prompt[:100]}...")
-        
+
         logger.info(f"Tokenizing input, moving to device: {model.device}")
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
         logger.info(f"Input shape: {inputs['input_ids'].shape}")
-        
+
         logger.info("Starting generation...")
         output_ids = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            do_sample=True,
-            temperature=TEMPERATURE,
-            top_p=TOP_P,
+            do_sample=False,
             repetition_penalty=REPETITION_PENALTY,
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.pad_token_id,
@@ -140,10 +137,11 @@ def generate_answer(model, tokenizer, question: str, region: str = "General", ma
         )
         logger.info(f"Generation complete, output shape: {output_ids.shape}")
 
-        generated = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-        logger.info(f"Decoded output (first 100 chars): {generated[:100]}...")
-        
-        result = generated.split("[/INST]", 1)[-1].strip() if "[/INST]" in generated else generated.strip()
+        # Decode only the newly generated tokens — works for any chat template
+        # (ChatML, Llama-3, Llama-2-INST, etc.) without per-template string splits.
+        prompt_len = inputs["input_ids"].shape[1]
+        new_tokens = output_ids[0, prompt_len:]
+        result = tokenizer.decode(new_tokens, skip_special_tokens=True).strip()
         logger.info(f"Final result (first 100 chars): {result[:100]}...")
         return result
     except Exception as e:

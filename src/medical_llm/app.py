@@ -11,6 +11,7 @@ from .config import BASE_MODEL, ADAPTER_REPO_ID, ADAPTER_DIR, REGION
 from .infer import generate_answer, load_model, load_tokenizer, stream_answer
 from .nlp_processor import process_user_input, build_context_prompt
 from .ocr import extract_text_from_file
+from .web_context import fetch_wiki_context, should_ground
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -103,8 +104,15 @@ def get_pipeline():
 
 
 def generate_response(message: str, region: str) -> Generator[str, None, None]:
-    """Stream the model response chunk-by-chunk so the UI can display tokens
-    as they arrive (massively improves perceived latency on CPU)."""
+    """Stream the model response chunk-by-chunk.
+
+    For short / underspecified queries (e.g. ``"diabetic symptoms"``) the 1B
+    base model has nothing to anchor on and tends to hallucinate. We:
+      1. Look up the best-matching Wikipedia page and inject its summary as
+         grounding context in the prompt.
+      2. After streaming finishes, append a deterministic "Did you mean ...?"
+         clarifier so the user can confirm the topic.
+    """
     if not message.strip():
         yield ""
         return
@@ -113,9 +121,38 @@ def generate_response(message: str, region: str) -> Generator[str, None, None]:
         model, tokenizer = get_pipeline()
         nlp_result = process_user_input(message)
         enhanced_message = build_context_prompt(nlp_result, message)
+
+        # ---- Optional grounding via Wikipedia for short queries -----------
+        wiki_extract: str | None = None
+        wiki_title: str | None = None
+        if should_ground(message):
+            try:
+                wiki_extract, wiki_title = fetch_wiki_context(message)
+            except Exception as e:
+                logger.warning(f"Wikipedia grounding failed: {e}")
+
+        if wiki_extract and wiki_title:
+            logger.info(f"Grounding with Wikipedia page: {wiki_title}")
+            enhanced_message = (
+                f"{enhanced_message}\n\n"
+                f"--- REFERENCE (Wikipedia: \"{wiki_title}\") ---\n"
+                f"{wiki_extract}\n"
+                f"--- END REFERENCE ---\n\n"
+                "Use ONLY the reference above and well-known medical knowledge "
+                "to answer the user's question. Stay on-topic with the reference."
+            )
+
         logger.info(f"Streaming answer (Region: {region})")
         for chunk in stream_answer(model, tokenizer, enhanced_message, region=region):
             yield chunk
+
+        # ---- Deterministic clarifier (so it cannot be forgotten / hallucinated)
+        if wiki_title:
+            yield (
+                "\n\n---\n"
+                f"*Did you mean **{wiki_title}**? "
+                "If not, please rephrase with more detail.*"
+            )
         logger.info("Stream finished")
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
