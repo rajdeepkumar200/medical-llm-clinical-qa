@@ -95,7 +95,8 @@ def build_demo() -> gr.Blocks:
         # Region selector (compact)
         with gr.Row():
             region = gr.Dropdown(REGIONS, value=REGION, label="🌍 Region", scale=2)
-            gr.Markdown("**⚠️ For educational use. Consult healthcare professionals for diagnosis.**", scale=3)
+            with gr.Column(scale=3):
+                gr.Markdown("**⚠️ For educational use. Consult healthcare professionals for diagnosis.**")
         
         # Conversation display
         chatbot = gr.Chatbot(label="Conversation", height=450, show_label=False)
