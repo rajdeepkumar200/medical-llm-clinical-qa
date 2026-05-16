@@ -60,10 +60,10 @@ def load_model(base_model: str = BASE_MODEL, adapter_path: str | None = None):
 
 
 @torch.inference_mode()
-def generate_answer(model, tokenizer, question: str, max_new_tokens: int = MAX_NEW_TOKENS) -> str:
+def generate_answer(model, tokenizer, question: str, region: str = "General", max_new_tokens: int = MAX_NEW_TOKENS) -> str:
     try:
-        logger.info(f"Building prompt for question: {question[:50]}...")
-        prompt = build_chat_prompt(question)
+        logger.info(f"Building prompt for question: {question[:50]}... (Region: {region})")
+        prompt = build_chat_prompt(question, region=region)
         logger.info(f"Prompt: {prompt[:100]}...")
         
         logger.info(f"Tokenizing input, moving to device: {model.device}")

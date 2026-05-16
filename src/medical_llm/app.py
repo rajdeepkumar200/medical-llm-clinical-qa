@@ -5,8 +5,9 @@ import logging
 
 import gradio as gr  # type: ignore[import-not-found]
 
-from .config import ADAPTER_DIR, ADAPTER_REPO_ID, BASE_MODEL
+from .config import ADAPTER_DIR, ADAPTER_REPO_ID, BASE_MODEL, REGION
 from .infer import generate_answer, load_model, load_tokenizer
+from .prompts import build_region_aware_system_prompt
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -14,6 +15,20 @@ logger = logging.getLogger(__name__)
 
 MODEL = None
 TOKENIZER = None
+CURRENT_REGION = REGION
+
+SUPPORTED_REGIONS = [
+    "General",
+    "United States",
+    "United Kingdom", 
+    "Canada",
+    "Australia",
+    "New Zealand",
+    "India",
+    "Singapore",
+    "Hong Kong",
+    "Other"
+]
 
 
 def get_pipeline():
@@ -47,32 +62,82 @@ def get_pipeline():
     return MODEL, TOKENIZER
 
 
-def respond(message: str, history):
+def respond(message: str, history, region: str = REGION):
     try:
+        global CURRENT_REGION
+        CURRENT_REGION = region
         model, tokenizer = get_pipeline()
-        logger.info(f"Generating answer for: {message[:50]}...")
-        answer = generate_answer(model, tokenizer, message)
+        logger.info(f"Generating answer for: {message[:50]}... (Region: {region})")
+        answer = generate_answer(model, tokenizer, message, region=region)
         logger.info("Answer generated successfully")
         return answer
     except Exception as e:
         logger.error(f"Error in respond: {e}", exc_info=True)
-        return f"Error: {str(e)}"
+        return f"Error generating response: {str(e)}\n\nPlease try again or check the Space logs for details."
 
 
 def build_demo() -> gr.Blocks:
-    demo = gr.ChatInterface(
-        fn=respond,
-        title="Clinical Q&A Assistant",
-        description="Ask a medical question and get a concise answer. Always verify important advice with a clinician.",
-        examples=[
-            "What are the common side effects of amoxicillin?",
-            "How do I recognize signs of dehydration in a child?",
-            "What is the first-line treatment for seasonal allergic rhinitis?",
-        ],
-        cache_examples=False,  # Disable example caching to avoid model load on startup
-    )
-    # Disable API docs to avoid Gradio schema generation crash
-    demo.show_api = False
+    with gr.Blocks(title="Clinical Q&A Assistant") as demo:
+        gr.Markdown("""
+        # Clinical Q&A Assistant
+        Ask a medical question and get a concise, evidence-based answer tailored to your region's healthcare standards.
+        
+        **Important:** Always verify important medical advice with a qualified healthcare professional.
+        """)
+        
+        with gr.Row():
+            region_selector = gr.Dropdown(
+                choices=SUPPORTED_REGIONS,
+                value=REGION,
+                label="Select Your Region/Country",
+                info="Healthcare standards and practices vary by region"
+            )
+        
+        chatbot = gr.Chatbot(label="Conversation", height=400)
+        
+        with gr.Row():
+            msg = gr.Textbox(
+                label="Your Question",
+                placeholder="Ask your medical question here...",
+                scale=4
+            )
+            submit = gr.Button("Submit", scale=1)
+        
+        gr.Examples(
+            examples=[
+                ("What are the common side effects of amoxicillin?", "General"),
+                ("How do I recognize signs of dehydration in a child?", "General"),
+                ("What is the first-line treatment for seasonal allergic rhinitis?", "General"),
+            ],
+            inputs=[msg, region_selector],
+            label="Example Questions"
+        )
+        
+        def respond_with_region(message, history, region):
+            return respond(message, history, region)
+        
+        def update_chatbot(message, region, history):
+            try:
+                response = respond_with_region(message, history, region)
+                history.append([message, response])
+                return history, ""
+            except Exception as e:
+                logger.error(f"Error: {e}")
+                history.append([message, f"Error: {str(e)}"])
+                return history, ""
+        
+        submit.click(
+            fn=update_chatbot,
+            inputs=[msg, region_selector, chatbot],
+            outputs=[chatbot, msg]
+        )
+        msg.submit(
+            fn=update_chatbot,
+            inputs=[msg, region_selector, chatbot],
+            outputs=[chatbot, msg]
+        )
+        
+        demo.show_api = False
     return demo
 
 
