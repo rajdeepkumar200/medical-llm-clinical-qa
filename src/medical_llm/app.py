@@ -31,7 +31,6 @@ def build_demo() -> gr.Blocks:
         fn=respond,
         title="Clinical Q&A Assistant",
         description="Ask a medical question and get a concise answer. Always verify important advice with a clinician.",
-        api_visibility="private",
         examples=[
             "What are the common side effects of amoxicillin?",
             "How do I recognize signs of dehydration in a child?",
