@@ -335,7 +335,64 @@ footer { display: none !important; }
 }
 .example-card button:hover { background: var(--accent-soft) !important; }
 
-.attach-status { font-size: 0.85rem; color: var(--ink-soft); padding: 4px 10px; }
+/* ----- Inline attached-file chip (inside the input card, above textarea) ----- */
+.attach-chip-row {
+    padding: 6px 8px 0 8px !important;
+    background: transparent !important;
+    border: none !important;
+}
+.attach-chip-row p { margin: 0 !important; }
+.attach-chip-inline {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid #e6d5b8;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.82rem;
+    line-height: 1.2;
+    max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.attach-chip-inline strong { color: var(--ink); font-weight: 600; }
+.attach-chip-inline.attach-warn {
+    background: #fdecea; color: #b3261e; border-color: #f5c6c0;
+}
+
+/* ----- Pill-shaped processing indicator at the top ----- */
+#processing-pill {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    background: var(--ink);
+    color: #fff;
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: 0 6px 24px rgba(31, 30, 28, 0.18);
+    animation: pill-pulse 1.6s ease-in-out infinite;
+    width: auto !important;
+    max-width: 90vw;
+}
+#processing-pill p { margin: 0 !important; color: #fff !important; }
+@keyframes pill-pulse {
+    0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+    50% { opacity: 0.85; transform: translateX(-50%) scale(0.98); }
+}
+
+/* ----- Hide Gradio's default progress overlay (it was overlapping the input row) ----- */
+.gradio-container .progress-text,
+.gradio-container .progress-bar,
+.gradio-container .wrap.default,
+.gradio-container .wrap.svelte-1ipelgc,
+.gradio-container div[class*="progress"] {
+    display: none !important;
+}
+/* Also hide the eta/timer pill some Gradio versions show */
+.gradio-container .eta-bar { display: none !important; }
 
 /* ----- Chat view ----- */
 #chat-view { padding: 12px 4px 24px 4px; }
@@ -406,6 +463,13 @@ def build_demo():
         history_state = gr.State([])
         pending_file_state = gr.State(None)  # file path waiting to be attached
 
+        # Pill-shaped processing indicator visible during generation
+        processing_pill = gr.Markdown(
+            "⚡ Generating response…",
+            elem_id="processing-pill",
+            visible=False,
+        )
+
         # =================== WELCOME VIEW ===================
         with gr.Column(visible=True, elem_id="welcome-view") as welcome_view:
             gr.HTML(
@@ -418,6 +482,12 @@ def build_demo():
             )
 
             with gr.Column(elem_id="welcome-card"):
+                # Attached-file chip sits inside the input card, above the textarea
+                welcome_attach_chip = gr.Markdown(
+                    "",
+                    elem_classes=["attach-chip-row"],
+                    visible=False,
+                )
                 welcome_input = gr.Textbox(
                     placeholder="Describe your symptoms or paste lab values…",
                     lines=2,
@@ -425,14 +495,11 @@ def build_demo():
                     container=False,
                     elem_id="welcome-textbox",
                 )
-                with gr.Row(elem_id="welcome-actions"):
+                with gr.Row(elem_classes=["actions-row"]):
                     welcome_upload = gr.UploadButton(
                         "+",
                         file_types=["image", ".pdf"],
                         elem_classes=["icon-btn"],
-                    )
-                    welcome_attach_status = gr.Markdown(
-                        "", elem_classes=["attach-status"]
                     )
                     welcome_send = gr.Button(
                         "➤", elem_classes=["send-btn"]
@@ -467,20 +534,22 @@ def build_demo():
             )
 
             with gr.Column(elem_id="chat-input-card"):
+                chat_attach_chip = gr.Markdown(
+                    "",
+                    elem_classes=["attach-chip-row"],
+                    visible=False,
+                )
                 chat_input = gr.Textbox(
                     placeholder="Ask a follow-up…",
                     lines=2,
                     show_label=False,
                     container=False,
                 )
-                with gr.Row(elem_id="welcome-actions"):
+                with gr.Row(elem_classes=["actions-row"]):
                     chat_upload = gr.UploadButton(
                         "+",
                         file_types=["image", ".pdf"],
                         elem_classes=["icon-btn"],
-                    )
-                    chat_attach_status = gr.Markdown(
-                        "", elem_classes=["attach-status"]
                     )
                     chat_send = gr.Button(
                         "➤", elem_classes=["send-btn"]
@@ -492,8 +561,11 @@ def build_demo():
 
         # =================== HANDLERS ===================
         def on_upload(file_obj):
+            """Returns (path, chip_update_for_welcome, chip_update_for_chat)."""
+            empty = gr.update(value="", visible=False)
             if file_obj is None:
-                return None, ""
+                return None, empty, empty
+
             # gr.UploadButton may return a path string or an object with .name
             path = file_obj.name if hasattr(file_obj, "name") else str(file_obj)
             try:
@@ -509,17 +581,18 @@ def build_demo():
                 preview = ""
 
             if preview.strip():
-                snippet = preview.strip().splitlines()[0][:80]
-                status = (
-                    f"📎 **{display_name}** — OCR ✅ ({len(preview)} chars). "
-                    f"Preview: _{snippet}…_"
+                chip_text = (
+                    f'<span class="attach-chip-inline">📎 <strong>{display_name}</strong> '
+                    f'· OCR ✅ {len(preview)} chars</span>'
                 )
             else:
-                status = (
-                    f"📎 **{display_name}** — OCR could not extract text. "
-                    "You can still send and describe the values."
+                chip_text = (
+                    f'<span class="attach-chip-inline attach-warn">📎 <strong>{display_name}</strong> '
+                    f'· OCR could not extract text — describe values in your message</span>'
                 )
-            return path, status
+            chip_update = gr.update(value=chip_text, visible=True)
+            # Same chip is shown in whichever view is active; harmless to update both.
+            return path, chip_update, chip_update
 
         def submit_message(message, region_val, history, pending_file, request: gr.Request):
             """Submit from the welcome view (also covers follow-ups)."""
@@ -531,6 +604,7 @@ def build_demo():
                 region_val = "General"
 
             message = (message or "").strip()
+            empty_chip = gr.update(value="", visible=False)
             if not message and not pending_file:
                 return (
                     gr.update(),  # welcome_view
@@ -540,8 +614,8 @@ def build_demo():
                     "",  # welcome_input
                     "",  # chat_input
                     None,  # pending_file
-                    "",  # welcome_attach_status
-                    "",  # chat_attach_status
+                    empty_chip,  # welcome_attach_chip
+                    empty_chip,  # chat_attach_chip
                 )
 
             attachment_name = None
@@ -582,11 +656,12 @@ def build_demo():
                 "",  # clear welcome_input
                 "",  # clear chat_input
                 None,  # clear pending_file
-                "",  # clear welcome_attach_status
-                "",  # clear chat_attach_status
+                empty_chip,  # clear welcome_attach_chip
+                empty_chip,  # clear chat_attach_chip
             )
 
         def reset_chat():
+            empty_chip = gr.update(value="", visible=False)
             return (
                 gr.update(visible=True),  # welcome_view
                 gr.update(visible=False),  # chat_view
@@ -595,8 +670,8 @@ def build_demo():
                 "",  # welcome_input
                 "",  # chat_input
                 None,  # pending_file
-                "",  # welcome_attach_status
-                "",  # chat_attach_status
+                empty_chip,  # welcome_attach_chip
+                empty_chip,  # chat_attach_chip
             )
 
         def fill_example(text):
@@ -606,51 +681,60 @@ def build_demo():
         submit_outputs = [
             welcome_view, chat_view, history_state,
             chat_display, welcome_input, chat_input,
-            pending_file_state, welcome_attach_status, chat_attach_status,
+            pending_file_state, welcome_attach_chip, chat_attach_chip,
         ]
 
-        welcome_send.click(
-            fn=submit_message,
-            inputs=[welcome_input, region_state, history_state, pending_file_state],
-            outputs=submit_outputs,
-            api_name=False,
+        # Helpers to show/hide the pill-shaped processing indicator before/after generation
+        def _show_pill():
+            return gr.update(visible=True)
+
+        def _hide_pill():
+            return gr.update(visible=False)
+
+        submit_inputs_w = [welcome_input, region_state, history_state, pending_file_state]
+        submit_inputs_c = [chat_input, region_state, history_state, pending_file_state]
+
+        prog = "hidden"  # disable Gradio's default loader; we use our own pill
+        (
+            welcome_send.click(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
+            .then(submit_message, submit_inputs_w, submit_outputs, api_name=False, show_progress=prog)
+            .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
         )
-        welcome_input.submit(
-            fn=submit_message,
-            inputs=[welcome_input, region_state, history_state, pending_file_state],
-            outputs=submit_outputs,
-            api_name=False,
+        (
+            welcome_input.submit(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
+            .then(submit_message, submit_inputs_w, submit_outputs, api_name=False, show_progress=prog)
+            .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
         )
-        chat_send.click(
-            fn=submit_message,
-            inputs=[chat_input, region_state, history_state, pending_file_state],
-            outputs=submit_outputs,
-            api_name=False,
+        (
+            chat_send.click(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
+            .then(submit_message, submit_inputs_c, submit_outputs, api_name=False, show_progress=prog)
+            .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
         )
-        chat_input.submit(
-            fn=submit_message,
-            inputs=[chat_input, region_state, history_state, pending_file_state],
-            outputs=submit_outputs,
-            api_name=False,
+        (
+            chat_input.submit(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
+            .then(submit_message, submit_inputs_c, submit_outputs, api_name=False, show_progress=prog)
+            .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
         )
 
         welcome_upload.upload(
             fn=on_upload,
             inputs=[welcome_upload],
-            outputs=[pending_file_state, welcome_attach_status],
+            outputs=[pending_file_state, welcome_attach_chip, chat_attach_chip],
             api_name=False,
+            show_progress=prog,
         )
         chat_upload.upload(
             fn=on_upload,
             inputs=[chat_upload],
-            outputs=[pending_file_state, chat_attach_status],
+            outputs=[pending_file_state, welcome_attach_chip, chat_attach_chip],
             api_name=False,
+            show_progress=prog,
         )
 
-        new_chat_btn.click(fn=reset_chat, outputs=submit_outputs, api_name=False)
+        new_chat_btn.click(fn=reset_chat, outputs=submit_outputs, api_name=False, show_progress=prog)
 
         for btn in example_btns:
-            btn.click(fn=fill_example, inputs=[btn], outputs=[welcome_input], api_name=False)
+            btn.click(fn=fill_example, inputs=[btn], outputs=[welcome_input], api_name=False, show_progress=prog)
 
         # Auto-detect region on app load and update both the badge + state
         def _init_region(request: gr.Request):
