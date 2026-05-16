@@ -126,8 +126,6 @@ def build_demo() -> gr.Blocks:
             inputs=[msg, region_selector, chatbot],
             outputs=[chatbot, msg]
         )
-        
-        demo.show_api = False
     return demo
 
 
