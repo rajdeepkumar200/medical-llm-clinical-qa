@@ -210,93 +210,261 @@ def _render_conversation(history: list[dict]) -> str:
 
 CUSTOM_CSS = """
 :root {
-    --bg: #faf9f5;
-    --panel: #ffffff;
-    --ink: #1f1e1c;
-    --ink-soft: #5c5a54;
+    --bg: #0a0a0b;
+    --sidebar: #131316;
+    --panel: #1a1a1d;
+    --panel-2: #232328;
+    --ink: #ededed;
+    --ink-soft: #9a9a9a;
     --accent: #c96442;
-    --accent-soft: #f4ead8;
-    --border: #e7e2d6;
-    --user-bg: #f1ece0;
-    --assistant-bg: #ffffff;
+    --accent-soft: rgba(201, 100, 66, 0.18);
+    --border: #2a2a2f;
+    --user-bg: #2a1f1a;
+    --assistant-bg: #1a1a1d;
 }
 
-.gradio-container {
+html, body, .gradio-container {
     background: var(--bg) !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif !important;
     color: var(--ink) !important;
-    max-width: 880px !important;
-    margin: 0 auto !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 100vh;
 }
+.gradio-container > .main, .gradio-container > div { padding: 0 !important; }
+* { box-sizing: border-box; }
 
 footer { display: none !important; }
 
-/* ----- Welcome view ----- */
-#welcome-view {
-    min-height: 78vh;
+/* ----- App shell with sidebar ----- */
+#app-shell {
+    display: flex;
+    flex-direction: row;
+    min-height: 100vh;
+    align-items: stretch;
+    gap: 0 !important;
+    width: 100%;
+}
+#sidebar {
+    background: var(--sidebar) !important;
+    border-right: 1px solid var(--border) !important;
+    min-width: 240px !important;
+    max-width: 260px !important;
+    flex: 0 0 240px !important;
+    padding: 20px 14px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+}
+.brand {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 1.05rem; font-weight: 600; color: var(--ink);
+    padding: 6px 4px 18px 4px;
+    border-bottom: 1px solid var(--border);
+}
+.new-chat-pill button, button.new-chat-pill {
+    background: var(--panel-2) !important;
+    color: var(--ink) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    padding: 10px 14px !important;
+    width: 100% !important;
+    text-align: left !important;
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    margin-top: 14px !important;
+}
+.new-chat-pill button:hover { background: var(--accent-soft) !important; color: var(--accent) !important; border-color: var(--accent) !important; }
+.history-label {
+    color: var(--ink-soft); font-size: 0.72rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    margin: 20px 4px 8px 4px;
+}
+#sidebar-history {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    padding: 0 4px;
+}
+#sidebar-history p { margin: 6px 0 !important; line-height: 1.45; }
+#sidebar-history strong { color: var(--ink); font-weight: 600; }
+.hist-item {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 8px;
+    margin: 2px 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    line-height: 1.35;
+    border: 1px solid transparent;
+}
+.hist-item:hover { background: var(--panel-2); color: var(--ink); }
+
+/* ----- Main pane ----- */
+#main {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: var(--bg);
+    min-height: 100vh;
+    padding: 0 !important;
+    overflow: hidden;
+}
+#topbar {
+    flex: 0 0 auto;
+    padding: 14px 24px !important;
+    border-bottom: 1px solid var(--border);
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 16px;
+}
+.topbar-title {
+    font-size: 1.02rem; font-weight: 600; color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
+}
+#region-badge {
+    margin: 0 !important;
+    text-align: right;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    min-width: 200px;
+}
+#region-badge p { margin: 0 !important; color: var(--ink-soft) !important; }
+#region-badge strong { color: var(--accent); }
+
+#content-area {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 24px 24px 12px 24px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding: 24px 16px;
 }
-#welcome-title {
-    text-align: center;
-    margin-bottom: 8px;
-}
-#welcome-title h1 {
-    font-size: 2.4rem;
-    font-weight: 600;
-    color: var(--ink);
-    margin: 0 0 8px 0;
-}
-#welcome-title p {
-    color: var(--ink-soft);
-    font-size: 1.05rem;
-    margin: 0;
-}
-#welcome-card {
-    width: 100%;
-    max-width: 720px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 22px;
-    padding: 14px 14px 10px 14px;
-    box-shadow: 0 8px 32px rgba(31, 30, 28, 0.06);
-    margin-top: 28px;
-}
-#welcome-card textarea {
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    font-size: 1.05rem !important;
-    resize: none !important;
-    padding: 12px !important;
-    min-height: 60px !important;
-}
-#welcome-card textarea:focus { outline: none !important; }
-#welcome-card .scroll-hide { border: none !important; background: transparent !important; }
 
-#welcome-actions {
+/* ----- Welcome hero (shown when no messages yet) ----- */
+#welcome-block {
+    flex: 1 1 auto;
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    padding: 6px 6px 2px 6px;
+    justify-content: center;
+    min-height: 40vh;
+}
+.hero { text-align: center; max-width: 600px; margin-bottom: 32px; padding: 0 16px; }
+.hero h1 { font-size: 2rem; font-weight: 600; color: var(--ink); margin: 0 0 10px 0; }
+.hero p { color: var(--ink-soft); font-size: 1rem; margin: 0; line-height: 1.5; }
+
+#examples-row {
+    max-width: 700px; width: 100%; margin: 0 auto;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.example-card button, button.example-card {
+    background: var(--panel) !important;
+    color: var(--ink) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    text-align: left !important;
+    padding: 14px 16px !important;
+    font-weight: 400 !important;
+    font-size: 0.9rem !important;
+    line-height: 1.45 !important;
+    white-space: normal !important;
+    height: auto !important;
+    transition: all 0.15s ease;
+}
+.example-card button:hover, button.example-card:hover {
+    background: var(--panel-2) !important;
+    border-color: var(--accent) !important;
+    color: var(--ink) !important;
+}
+
+/* ----- Chat messages ----- */
+#chat-stream { padding-bottom: 12px; }
+.bubble {
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin: 12px 0;
+    border: 1px solid var(--border);
+    max-width: 820px;
+}
+.bubble.msg-user {
+    background: var(--user-bg);
+    margin-left: auto; margin-right: 0;
+}
+.bubble.msg-assistant {
+    background: var(--assistant-bg);
+    margin-right: auto; margin-left: 0;
+}
+.bubble-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bubble-head .avatar { font-size: 1.05rem; }
+.bubble-head .who { font-weight: 600; color: var(--ink-soft); font-size: 0.8rem; }
+.bubble-body { font-size: 0.95rem; line-height: 1.65; color: var(--ink); }
+.bubble-body p { color: var(--ink); margin: 6px 0; }
+.bubble-body h3 { font-size: 1rem; margin: 14px 0 6px 0; color: var(--ink); }
+.bubble-body ul, .bubble-body ol { padding-left: 22px; margin: 6px 0; }
+.bubble-body li { margin: 4px 0; color: var(--ink); }
+.bubble-body strong { color: #fff; font-weight: 600; }
+.bubble-body em { color: var(--ink-soft); }
+.bubble-body code {
+    background: var(--panel-2); color: #f5b893;
+    padding: 1px 6px; border-radius: 4px; font-size: 0.9em;
+}
+.attach-chip {
+    display: inline-block; background: var(--accent-soft); color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px; padding: 2px 10px; font-size: 0.78rem; margin: 4px 0;
+}
+
+/* ----- Input bar (sticky at bottom of main pane) ----- */
+#input-bar {
+    flex: 0 0 auto;
+    background: var(--panel) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 16px !important;
+    padding: 8px 12px 6px 12px !important;
+    margin: 0 24px 16px 24px;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.3);
+}
+#input-bar textarea {
+    background: transparent !important;
+    color: var(--ink) !important;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: 0.95rem !important;
+    min-height: 44px !important;
+    resize: none !important;
+    padding: 8px !important;
+}
+#input-bar textarea::placeholder { color: var(--ink-soft) !important; }
+#input-bar textarea:focus { outline: none !important; }
+
+.actions-row {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 2px 4px !important;
     gap: 8px;
 }
 .icon-btn button, button.icon-btn {
-    background: var(--accent-soft) !important;
-    color: var(--accent) !important;
+    background: var(--panel-2) !important;
+    color: var(--ink) !important;
     border: 1px solid var(--border) !important;
     border-radius: 999px !important;
-    width: 40px !important; height: 40px !important;
-    min-width: 40px !important;
+    width: 38px !important; height: 38px !important;
+    min-width: 38px !important;
     padding: 0 !important;
-    font-size: 1.3rem !important;
+    font-size: 1.2rem !important;
     font-weight: 600 !important;
 }
-.icon-btn button:hover, button.icon-btn:hover {
-    background: #ecdcc4 !important;
+.icon-btn button:hover {
+    background: var(--accent-soft) !important;
+    color: var(--accent) !important;
+    border-color: var(--accent) !important;
 }
 .send-btn button, button.send-btn {
     background: var(--accent) !important;
@@ -306,297 +474,225 @@ footer { display: none !important; }
     width: 42px !important; height: 42px !important;
     min-width: 42px !important;
     padding: 0 !important;
-    font-size: 1.1rem !important;
+    font-size: 1.05rem !important;
 }
-.send-btn button:hover, button.send-btn:hover { filter: brightness(0.95); }
+.send-btn button:hover { filter: brightness(1.1); }
 
-#region-badge {
-    max-width: 720px; width: 100%; margin: 14px auto 0 auto;
-    text-align: center; color: var(--ink-soft); font-size: 0.85rem;
-}
-#region-badge strong { color: var(--accent); }
-
-#examples-row {
-    max-width: 720px; width: 100%; margin: 24px auto 0 auto;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-}
-.example-card button {
-    background: var(--panel) !important;
-    color: var(--ink) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 14px !important;
-    text-align: left !important;
-    padding: 12px 14px !important;
-    font-weight: 400 !important;
-    font-size: 0.92rem !important;
-    line-height: 1.35 !important;
-    white-space: normal !important;
-    height: auto !important;
-}
-.example-card button:hover { background: var(--accent-soft) !important; }
-
-/* ----- Inline attached-file chip (inside the input card, above textarea) ----- */
+/* ----- Inline attached-file chip (inside input-bar, above textarea) ----- */
 .attach-chip-row {
-    padding: 6px 8px 0 8px !important;
-    background: transparent !important;
-    border: none !important;
+    padding: 4px 4px 0 4px !important;
+    background: transparent !important; border: none !important;
 }
 .attach-chip-row p { margin: 0 !important; }
 .attach-chip-inline {
     display: inline-flex; align-items: center; gap: 6px;
     background: var(--accent-soft);
     color: var(--accent);
-    border: 1px solid #e6d5b8;
+    border: 1px solid var(--accent);
     border-radius: 999px;
     padding: 4px 12px;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     line-height: 1.2;
     max-width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .attach-chip-inline strong { color: var(--ink); font-weight: 600; }
 .attach-chip-inline.attach-warn {
-    background: #fdecea; color: #b3261e; border-color: #f5c6c0;
+    background: rgba(179, 38, 30, 0.18);
+    color: #ef6b65;
+    border-color: #b3261e;
 }
 
-/* ----- Pill-shaped processing indicator at the top ----- */
+/* ----- Pill-shaped processing indicator ----- */
 #processing-pill {
     position: fixed;
     top: 16px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 9999;
-    background: var(--ink);
-    color: #fff;
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 1px solid var(--accent);
     border-radius: 999px;
     padding: 8px 18px;
     font-size: 0.85rem;
     font-weight: 500;
-    box-shadow: 0 6px 24px rgba(31, 30, 28, 0.18);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
     animation: pill-pulse 1.6s ease-in-out infinite;
     width: auto !important;
     max-width: 90vw;
 }
-#processing-pill p { margin: 0 !important; color: #fff !important; }
+#processing-pill p { margin: 0 !important; color: var(--ink) !important; font-weight: 500; }
 @keyframes pill-pulse {
     0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
-    50% { opacity: 0.85; transform: translateX(-50%) scale(0.98); }
+    50% { opacity: 0.8; transform: translateX(-50%) scale(0.97); }
 }
 
-/* ----- Hide Gradio's default progress overlay (it was overlapping the input row) ----- */
+/* ----- Hide Gradio's default progress overlay ----- */
 .gradio-container .progress-text,
 .gradio-container .progress-bar,
 .gradio-container .wrap.default,
-.gradio-container .wrap.svelte-1ipelgc,
-.gradio-container div[class*="progress"] {
-    display: none !important;
-}
-/* Also hide the eta/timer pill some Gradio versions show */
+.gradio-container div[class*="progress"],
 .gradio-container .eta-bar { display: none !important; }
 
-/* ----- Chat view ----- */
-#chat-view { padding: 12px 4px 24px 4px; }
-#chat-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 8px 16px 8px; border-bottom: 1px solid var(--border);
-    margin-bottom: 16px;
-}
-#chat-header h2 { font-size: 1.1rem; margin: 0; font-weight: 600; }
-
-.bubble {
-    border-radius: 16px; padding: 14px 18px; margin: 10px 0;
-    border: 1px solid var(--border);
-}
-.bubble.msg-user { background: var(--user-bg); }
-.bubble.msg-assistant { background: var(--assistant-bg); }
-.bubble-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.bubble-head .avatar { font-size: 1.1rem; }
-.bubble-head .who { font-weight: 600; color: var(--ink-soft); font-size: 0.85rem; }
-.bubble-body { font-size: 0.98rem; line-height: 1.6; color: var(--ink); }
-.bubble-body h3 { font-size: 1.02rem; margin-top: 14px; margin-bottom: 6px; color: var(--ink); }
-.bubble-body ul { padding-left: 22px; margin: 6px 0; }
-.bubble-body li { margin: 4px 0; }
-.bubble-body strong { color: var(--ink); }
-.attach-chip {
-    display: inline-block; background: var(--accent-soft); color: var(--accent);
-    border-radius: 999px; padding: 2px 10px; font-size: 0.8rem; margin: 4px 0;
-}
-
-#chat-input-card {
-    position: sticky; bottom: 0;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 22px;
-    padding: 10px 12px 6px 12px;
-    margin-top: 16px;
-    box-shadow: 0 -4px 16px rgba(31,30,28,0.04);
-}
-#chat-input-card textarea {
-    border: none !important; background: transparent !important;
-    box-shadow: none !important; font-size: 1rem !important;
-    min-height: 48px !important; resize: none !important;
-}
-#chat-input-card textarea:focus { outline: none !important; }
-
-.new-chat-btn button {
-    background: transparent !important;
-    color: var(--ink-soft) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 999px !important;
-    padding: 6px 14px !important;
-    font-size: 0.85rem !important;
-}
-.new-chat-btn button:hover { background: var(--accent-soft) !important; color: var(--accent) !important; }
-
+/* ----- Disclaimer ----- */
 .disclaimer {
-    text-align: center; color: var(--ink-soft); font-size: 0.78rem;
-    margin-top: 12px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 0.72rem;
+    padding: 0 24px 14px 24px;
+}
+
+/* ----- Mobile responsiveness ----- */
+@media (max-width: 768px) {
+    #app-shell { flex-direction: column; }
+    #sidebar {
+        flex: 0 0 auto !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        border-right: none !important;
+        border-bottom: 1px solid var(--border) !important;
+        padding: 12px 16px !important;
+    }
+    #sidebar-history { max-height: 120px; }
+    .hero h1 { font-size: 1.6rem; }
+    #examples-row { grid-template-columns: 1fr; }
+    #input-bar { margin: 0 12px 12px 12px; }
+    #content-area { padding: 16px; }
 }
 """
 
 
+def _render_sidebar(history):
+    """Render a compact list of past user messages for the sidebar."""
+    user_msgs = [m for m in history if m.get("role") == "user"]
+    if not user_msgs:
+        return "_No messages yet. Start by asking a question._"
+    items = []
+    for i, m in enumerate(user_msgs, 1):
+        content = (m.get("content") or "").strip().replace("\n", " ")
+        preview = content[:48] + ("…" if len(content) > 48 else "")
+        items.append(f'<div class="hist-item">{i}. {preview}</div>')
+    return "\n".join(items)
+
+
 def build_demo():
-    """Claude-inspired UI: centered welcome screen that transitions to a chat view."""
-    with gr.Blocks(title="Clinical AI Assistant", css=CUSTOM_CSS, theme=gr.themes.Soft()) as demo:
+    """Dark UI with sidebar history. Single main pane: welcome content lives in
+    the same area as the chat stream so the response replaces it (no scroll)."""
+    with gr.Blocks(title="Clinical AI Assistant", css=CUSTOM_CSS, theme=gr.themes.Base()) as demo:
 
-        # State: conversation history as list of {role, content, attachment}
+        # ----- State -----
         history_state = gr.State([])
-        pending_file_state = gr.State(None)  # file path waiting to be attached
+        pending_file_state = gr.State(None)
+        region_state = gr.State(REGION)
 
-        # Pill-shaped processing indicator visible during generation
+        # ----- Floating processing pill -----
         processing_pill = gr.Markdown(
             "⚡ Generating response…",
             elem_id="processing-pill",
             visible=False,
         )
 
-        # =================== WELCOME VIEW ===================
-        with gr.Column(visible=True, elem_id="welcome-view") as welcome_view:
-            gr.HTML(
-                """
-                <div id="welcome-title">
-                    <h1>🩺 Clinical AI Assistant</h1>
-                    <p>Ask anything about symptoms, medications, or lab reports — clear answers, in plain English.</p>
-                </div>
-                """
-            )
+        # ----- App shell: sidebar + main -----
+        with gr.Row(elem_id="app-shell"):
 
-            with gr.Column(elem_id="welcome-card"):
-                # Attached-file chip sits inside the input card, above the textarea
-                welcome_attach_chip = gr.Markdown(
-                    "",
-                    elem_classes=["attach-chip-row"],
-                    visible=False,
+            # ============ SIDEBAR ============
+            with gr.Column(elem_id="sidebar", scale=0):
+                gr.HTML('<div class="brand">🩺 Clinical AI</div>')
+                new_chat_btn = gr.Button("＋ New chat", elem_classes=["new-chat-pill"])
+                gr.HTML('<div class="history-label">Conversation</div>')
+                sidebar_history = gr.Markdown(
+                    "_No messages yet. Start by asking a question._",
+                    elem_id="sidebar-history",
+                    sanitize_html=False,
                 )
-                welcome_input = gr.Textbox(
-                    placeholder="Describe your symptoms or paste lab values…",
-                    lines=2,
-                    show_label=False,
-                    container=False,
-                    elem_id="welcome-textbox",
-                )
-                with gr.Row(elem_classes=["actions-row"]):
-                    welcome_upload = gr.UploadButton(
-                        "+",
-                        file_types=["image", ".pdf"],
-                        elem_classes=["icon-btn"],
-                    )
-                    welcome_send = gr.Button(
-                        "➤", elem_classes=["send-btn"]
+
+            # ============ MAIN PANE ============
+            with gr.Column(elem_id="main", scale=1):
+                # Top bar
+                with gr.Row(elem_id="topbar"):
+                    gr.HTML('<div class="topbar-title">🩺 Clinical AI Assistant</div>')
+                    region_badge = gr.Markdown(
+                        "📍 Detecting your region…",
+                        elem_id="region-badge",
                     )
 
-            # Detected region badge (auto-filled on app load)
-            region_state = gr.State(REGION)
-            region_badge = gr.Markdown(
-                "📍 Detecting your region…",
-                elem_id="region-badge",
-            )
+                # Content area: welcome hero OR chat messages (mutually exclusive)
+                with gr.Column(elem_id="content-area"):
+                    with gr.Column(visible=True, elem_id="welcome-block") as welcome_block:
+                        gr.HTML(
+                            """
+                            <div class="hero">
+                                <h1>What can I help you with?</h1>
+                                <p>Ask about symptoms, medications, or lab reports — clear answers in plain English. Region-aware guidance, OCR-powered lab report reading.</p>
+                            </div>
+                            """
+                        )
+                        with gr.Row(elem_id="examples-row"):
+                            example_btns = [
+                                gr.Button(p, elem_classes=["example-card"]) for p in EXAMPLE_PROMPTS
+                            ]
 
-            with gr.Row(elem_id="examples-row"):
-                example_btns = [
-                    gr.Button(p, elem_classes=["example-card"]) for p in EXAMPLE_PROMPTS
-                ]
-
-            gr.HTML(
-                '<div class="disclaimer">⚠️ Educational use only. Always consult a qualified healthcare professional.</div>'
-            )
-
-        # =================== CHAT VIEW ===================
-        with gr.Column(visible=False, elem_id="chat-view") as chat_view:
-            with gr.Row(elem_id="chat-header"):
-                gr.HTML("<h2>🩺 Clinical AI Assistant</h2>")
-                new_chat_btn = gr.Button(
-                    "＋ New chat", elem_classes=["new-chat-btn"]
-                )
-
-            chat_display = gr.Markdown(
-                "", elem_id="chat-stream", sanitize_html=False
-            )
-
-            with gr.Column(elem_id="chat-input-card"):
-                chat_attach_chip = gr.Markdown(
-                    "",
-                    elem_classes=["attach-chip-row"],
-                    visible=False,
-                )
-                chat_input = gr.Textbox(
-                    placeholder="Ask a follow-up…",
-                    lines=2,
-                    show_label=False,
-                    container=False,
-                )
-                with gr.Row(elem_classes=["actions-row"]):
-                    chat_upload = gr.UploadButton(
-                        "+",
-                        file_types=["image", ".pdf"],
-                        elem_classes=["icon-btn"],
-                    )
-                    chat_send = gr.Button(
-                        "➤", elem_classes=["send-btn"]
+                    chat_display = gr.Markdown(
+                        "",
+                        elem_id="chat-stream",
+                        sanitize_html=False,
+                        visible=False,
                     )
 
-            gr.HTML(
-                '<div class="disclaimer">⚠️ Educational information — not a diagnosis. Always confirm with a clinician.</div>'
-            )
+                # Sticky input bar at bottom
+                with gr.Column(elem_id="input-bar"):
+                    attach_chip = gr.Markdown(
+                        "",
+                        elem_classes=["attach-chip-row"],
+                        visible=False,
+                    )
+                    input_box = gr.Textbox(
+                        placeholder="Ask anything medical — symptoms, medications, lab values…",
+                        lines=2,
+                        show_label=False,
+                        container=False,
+                    )
+                    with gr.Row(elem_classes=["actions-row"]):
+                        upload_btn = gr.UploadButton(
+                            "+",
+                            file_types=["image", ".pdf"],
+                            elem_classes=["icon-btn"],
+                        )
+                        send_btn = gr.Button("➤", elem_classes=["send-btn"])
+
+                gr.HTML(
+                    '<div class="disclaimer">⚠️ Educational use only. Always consult a qualified healthcare professional.</div>'
+                )
 
         # =================== HANDLERS ===================
         def on_upload(file_obj):
-            """Returns (path, chip_update_for_welcome, chip_update_for_chat)."""
             empty = gr.update(value="", visible=False)
             if file_obj is None:
-                return None, empty, empty
-
-            # gr.UploadButton may return a path string or an object with .name
+                return None, empty
             path = file_obj.name if hasattr(file_obj, "name") else str(file_obj)
             try:
                 display_name = Path(path).name
             except Exception:
                 display_name = "uploaded file"
-
-            # Try OCR right away so the user gets immediate feedback.
             try:
                 preview = extract_text_from_file(path)
             except Exception as e:
                 logger.warning(f"OCR preview failed: {e}")
                 preview = ""
-
             if preview.strip():
-                chip_text = (
+                chip = (
                     f'<span class="attach-chip-inline">📎 <strong>{display_name}</strong> '
                     f'· OCR ✅ {len(preview)} chars</span>'
                 )
             else:
-                chip_text = (
+                chip = (
                     f'<span class="attach-chip-inline attach-warn">📎 <strong>{display_name}</strong> '
                     f'· OCR could not extract text — describe values in your message</span>'
                 )
-            chip_update = gr.update(value=chip_text, visible=True)
-            # Same chip is shown in whichever view is active; harmless to update both.
-            return path, chip_update, chip_update
+            return path, gr.update(value=chip, visible=True)
 
         def submit_message(message, region_val, history, pending_file, request: gr.Request):
-            """Submit from the welcome view (also covers follow-ups)."""
-            # Re-detect region from the live request in case state was stale.
             detected = detect_region(request)
             if detected and detected != "General":
                 region_val = detected
@@ -605,17 +701,16 @@ def build_demo():
 
             message = (message or "").strip()
             empty_chip = gr.update(value="", visible=False)
+
             if not message and not pending_file:
                 return (
-                    gr.update(),  # welcome_view
-                    gr.update(),  # chat_view
+                    gr.update(),  # welcome_block
+                    gr.update(),  # chat_display
                     history,
-                    "",  # chat_display
-                    "",  # welcome_input
-                    "",  # chat_input
+                    "",  # input_box
                     None,  # pending_file
-                    empty_chip,  # welcome_attach_chip
-                    empty_chip,  # chat_attach_chip
+                    empty_chip,  # attach_chip
+                    _render_sidebar(history),  # sidebar_history
                 )
 
             attachment_name = None
@@ -628,12 +723,12 @@ def build_demo():
                 full_msg = _attach_file_note(message, pending_file)
 
             history = list(history or [])
-            history.append(
-                {"role": "user", "content": message or "(attached lab report)",
-                 "attachment": attachment_name}
-            )
+            history.append({
+                "role": "user",
+                "content": message or "(attached lab report)",
+                "attachment": attachment_name,
+            })
 
-            # Generate full answer
             response_text = ""
             try:
                 for chunk in generate_response(full_msg, region_val):
@@ -642,91 +737,71 @@ def build_demo():
                 logger.error(f"Generation error: {e}", exc_info=True)
                 response_text = f"⚠️ **Error:** {str(e)[:200]}"
 
-            history.append(
-                {"role": "assistant", "content": response_text, "attachment": None}
-            )
-
-            rendered = _render_conversation(history)
+            history.append({
+                "role": "assistant",
+                "content": response_text,
+                "attachment": None,
+            })
 
             return (
-                gr.update(visible=False),  # welcome_view
-                gr.update(visible=True),  # chat_view
+                gr.update(visible=False),  # hide welcome_block
+                gr.update(value=_render_conversation(history), visible=True),  # chat_display
                 history,
-                rendered,
-                "",  # clear welcome_input
-                "",  # clear chat_input
+                "",  # clear input
                 None,  # clear pending_file
-                empty_chip,  # clear welcome_attach_chip
-                empty_chip,  # clear chat_attach_chip
+                empty_chip,  # clear attach_chip
+                _render_sidebar(history),  # update sidebar
             )
 
         def reset_chat():
             empty_chip = gr.update(value="", visible=False)
             return (
-                gr.update(visible=True),  # welcome_view
-                gr.update(visible=False),  # chat_view
-                [],  # history
-                "",  # chat_display
-                "",  # welcome_input
-                "",  # chat_input
+                gr.update(visible=True),   # welcome_block visible
+                gr.update(value="", visible=False),  # chat_display hidden
+                [],   # history
+                "",   # input
                 None,  # pending_file
-                empty_chip,  # welcome_attach_chip
-                empty_chip,  # chat_attach_chip
+                empty_chip,  # attach_chip
+                _render_sidebar([]),  # sidebar reset
             )
 
         def fill_example(text):
             return text
 
-        # --- Wire events ---
-        submit_outputs = [
-            welcome_view, chat_view, history_state,
-            chat_display, welcome_input, chat_input,
-            pending_file_state, welcome_attach_chip, chat_attach_chip,
-        ]
-
-        # Helpers to show/hide the pill-shaped processing indicator before/after generation
         def _show_pill():
             return gr.update(visible=True)
 
         def _hide_pill():
             return gr.update(visible=False)
 
-        submit_inputs_w = [welcome_input, region_state, history_state, pending_file_state]
-        submit_inputs_c = [chat_input, region_state, history_state, pending_file_state]
+        # ----- Wire events -----
+        submit_outputs = [
+            welcome_block,
+            chat_display,
+            history_state,
+            input_box,
+            pending_file_state,
+            attach_chip,
+            sidebar_history,
+        ]
+        submit_inputs = [input_box, region_state, history_state, pending_file_state]
+        prog = "hidden"
 
-        prog = "hidden"  # disable Gradio's default loader; we use our own pill
         (
-            welcome_send.click(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
-            .then(submit_message, submit_inputs_w, submit_outputs, api_name=False, show_progress=prog)
+            send_btn.click(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
+            .then(submit_message, submit_inputs, submit_outputs, api_name=False, show_progress=prog)
             .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
         )
         (
-            welcome_input.submit(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
-            .then(submit_message, submit_inputs_w, submit_outputs, api_name=False, show_progress=prog)
-            .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
-        )
-        (
-            chat_send.click(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
-            .then(submit_message, submit_inputs_c, submit_outputs, api_name=False, show_progress=prog)
-            .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
-        )
-        (
-            chat_input.submit(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
-            .then(submit_message, submit_inputs_c, submit_outputs, api_name=False, show_progress=prog)
+            input_box.submit(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
+            .then(submit_message, submit_inputs, submit_outputs, api_name=False, show_progress=prog)
             .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
         )
 
-        welcome_upload.upload(
+        upload_btn.upload(
             fn=on_upload,
-            inputs=[welcome_upload],
-            outputs=[pending_file_state, welcome_attach_chip, chat_attach_chip],
-            api_name=False,
-            show_progress=prog,
-        )
-        chat_upload.upload(
-            fn=on_upload,
-            inputs=[chat_upload],
-            outputs=[pending_file_state, welcome_attach_chip, chat_attach_chip],
+            inputs=[upload_btn],
+            outputs=[pending_file_state, attach_chip],
             api_name=False,
             show_progress=prog,
         )
@@ -734,17 +809,17 @@ def build_demo():
         new_chat_btn.click(fn=reset_chat, outputs=submit_outputs, api_name=False, show_progress=prog)
 
         for btn in example_btns:
-            btn.click(fn=fill_example, inputs=[btn], outputs=[welcome_input], api_name=False, show_progress=prog)
+            btn.click(fn=fill_example, inputs=[btn], outputs=[input_box], api_name=False, show_progress=prog)
 
-        # Auto-detect region on app load and update both the badge + state
+        # Auto-detect region on app load
         def _init_region(request: gr.Request):
             region = detect_region(request)
             global CURRENT_REGION
             CURRENT_REGION = region
             label = (
-                f"📍 Region auto-detected: **{region}**"
+                f"📍 Region: **{region}**"
                 if region != "General"
-                else "📍 Region: **General** (no local preference detected)"
+                else "📍 Region: **General**"
             )
             return region, label
 
