@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.env.*
+.cache/
+.ipynb_checkpoints/
+outputs/
+adapters/
+checkpoints/
+wandb/
+.DS_Store
+huggingface-cache/
+*.safetensors
