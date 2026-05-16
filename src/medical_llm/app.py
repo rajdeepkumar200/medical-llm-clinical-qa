@@ -93,38 +93,42 @@ def build_demo() -> gr.Blocks:
                 info="Healthcare standards and practices vary by region"
             )
         
-        chatbot = gr.Chatbot(label="Conversation", height=400)
-        
         with gr.Row():
             msg = gr.Textbox(
                 label="Your Question",
                 placeholder="Ask your medical question here...",
-                scale=4
+                lines=2
             )
-            submit = gr.Button("Submit", scale=1)
         
-        def respond_with_region(message, history, region):
-            return respond(message, history, region)
+        output = gr.Textbox(
+            label="Response",
+            interactive=False,
+            lines=6
+        )
         
-        def update_chatbot(message, region, history):
+        def answer_question(question: str, region: str) -> str:
+            if not question.strip():
+                return ""
             try:
-                response = respond_with_region(message, history, region)
-                history.append([message, response])
-                return history, ""
+                model, tokenizer = get_pipeline()
+                logger.info(f"Generating answer for: {question[:50]}... (Region: {region})")
+                result = generate_answer(model, tokenizer, question, region=region)
+                logger.info("Answer generated successfully")
+                return result
             except Exception as e:
-                logger.error(f"Error: {e}")
-                history.append([message, f"Error: {str(e)}"])
-                return history, ""
+                logger.error(f"Error in answer_question: {e}", exc_info=True)
+                return f"Error: {str(e)}"
         
+        submit = gr.Button("Get Answer")
         submit.click(
-            fn=update_chatbot,
-            inputs=[msg, region_selector, chatbot],
-            outputs=[chatbot, msg]
+            fn=answer_question,
+            inputs=[msg, region_selector],
+            outputs=output
         )
         msg.submit(
-            fn=update_chatbot,
-            inputs=[msg, region_selector, chatbot],
-            outputs=[chatbot, msg]
+            fn=answer_question,
+            inputs=[msg, region_selector],
+            outputs=output
         )
     return demo
 
