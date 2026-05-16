@@ -22,7 +22,22 @@ def get_pipeline():
         try:
             logger.info(f"Loading tokenizer for {BASE_MODEL}...")
             TOKENIZER = load_tokenizer(BASE_MODEL)
-            adapter_source = ADAPTER_REPO_ID if ADAPTER_REPO_ID else (str(ADAPTER_DIR) if ADAPTER_DIR.exists() else None)
+            
+            # Try to load adapter from repo ID first, then fall back to local
+            adapter_source = None
+            if ADAPTER_REPO_ID:
+                logger.info(f"Attempting to load adapter from HF repo: {ADAPTER_REPO_ID}")
+                try:
+                    adapter_source = ADAPTER_REPO_ID
+                except Exception as e:
+                    logger.warning(f"Failed to load from {ADAPTER_REPO_ID}: {e}")
+                    adapter_source = None
+            
+            # Fall back to local adapter directory
+            if not adapter_source and ADAPTER_DIR.exists():
+                logger.info(f"Falling back to local adapter directory: {ADAPTER_DIR}")
+                adapter_source = str(ADAPTER_DIR)
+            
             logger.info(f"Loading model from {BASE_MODEL} with adapter: {adapter_source}...")
             MODEL = load_model(BASE_MODEL, adapter_source)
             logger.info("Model loaded successfully")

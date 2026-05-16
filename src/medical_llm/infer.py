@@ -61,19 +61,34 @@ def load_model(base_model: str = BASE_MODEL, adapter_path: str | None = None):
 
 @torch.inference_mode()
 def generate_answer(model, tokenizer, question: str, max_new_tokens: int = MAX_NEW_TOKENS) -> str:
-    prompt = build_chat_prompt(question)
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    try:
+        logger.info(f"Building prompt for question: {question[:50]}...")
+        prompt = build_chat_prompt(question)
+        logger.info(f"Prompt: {prompt[:100]}...")
+        
+        logger.info(f"Tokenizing input, moving to device: {model.device}")
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        logger.info(f"Input shape: {inputs['input_ids'].shape}")
+        
+        logger.info("Starting generation...")
+        output_ids = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            temperature=TEMPERATURE,
+            top_p=TOP_P,
+            repetition_penalty=REPETITION_PENALTY,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+        logger.info(f"Generation complete, output shape: {output_ids.shape}")
 
-    output_ids = model.generate(
-        **inputs,
-        max_new_tokens=max_new_tokens,
-        do_sample=True,
-        temperature=TEMPERATURE,
-        top_p=TOP_P,
-        repetition_penalty=REPETITION_PENALTY,
-        eos_token_id=tokenizer.eos_token_id,
-        pad_token_id=tokenizer.pad_token_id,
-    )
-
-    generated = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    return generated.split("[/INST]", 1)[-1].strip() if "[/INST]" in generated else generated.strip()
+        generated = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        logger.info(f"Decoded output (first 100 chars): {generated[:100]}...")
+        
+        result = generated.split("[/INST]", 1)[-1].strip() if "[/INST]" in generated else generated.strip()
+        logger.info(f"Final result (first 100 chars): {result[:100]}...")
+        return result
+    except Exception as e:
+        logger.error(f"Error in generate_answer: {e}", exc_info=True)
+        raise
