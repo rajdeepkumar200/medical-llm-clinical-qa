@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Iterable
 
 import torch
@@ -8,6 +9,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 from .config import BASE_MODEL, MAX_NEW_TOKENS, REPETITION_PENALTY, TEMPERATURE, TOP_P
 from .prompts import build_chat_prompt
+
+logger = logging.getLogger(__name__)
 
 
 def load_tokenizer(model_name: str = BASE_MODEL):
@@ -23,15 +26,18 @@ def load_model(base_model: str = BASE_MODEL, adapter_path: str | None = None):
     quantization_config = None
     try:
         if torch.cuda.is_available():
+            logger.info("CUDA available, attempting 4-bit quantization...")
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_compute_dtype=torch.bfloat16,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
             )
-    except Exception:
+    except Exception as e:
+        logger.warning(f"4-bit quantization not available: {e}, falling back to standard loading")
         pass  # Fall back to standard loading
 
+    logger.info(f"Loading base model: {base_model}")
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
         quantization_config=quantization_config,
@@ -39,9 +45,16 @@ def load_model(base_model: str = BASE_MODEL, adapter_path: str | None = None):
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
     )
     model.config.use_cache = False
+    logger.info("Base model loaded successfully")
 
     if adapter_path:
-        model = PeftModel.from_pretrained(model, adapter_path)
+        try:
+            logger.info(f"Loading adapter from: {adapter_path}")
+            model = PeftModel.from_pretrained(model, adapter_path)
+            logger.info("Adapter loaded successfully")
+        except Exception as e:
+            logger.warning(f"Failed to load adapter {adapter_path}: {e}. Using base model only.")
+            # Continue with base model if adapter fails
 
     return model
 
