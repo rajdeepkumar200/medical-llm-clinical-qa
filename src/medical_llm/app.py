@@ -10,6 +10,7 @@ import gradio as gr  # type: ignore[import-not-found]
 from .config import BASE_MODEL, ADAPTER_REPO_ID, ADAPTER_DIR, REGION
 from .infer import generate_answer, load_model, load_tokenizer
 from .nlp_processor import process_user_input, build_context_prompt
+from .ocr import extract_text_from_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -129,10 +130,12 @@ def update_region(region: str):
 # --- UI helpers -------------------------------------------------------------
 
 def _attach_file_note(message: str, file_path) -> str:
-    """Augment a message with a note about an uploaded lab-report image.
+    """Augment a message with OCR-extracted text from the uploaded file.
 
-    The base model is text-only, so we cannot read the image directly. We tell
-    the model an image was attached and ask it to handle the case gracefully.
+    The base model is text-only, so we OCR the lab report and inject the
+    recognised text directly into the prompt. If OCR is unavailable or
+    yields nothing usable, we fall back to a graceful note asking the user
+    to type the values.
     """
     if not file_path:
         return message
@@ -140,12 +143,32 @@ def _attach_file_note(message: str, file_path) -> str:
         name = Path(str(file_path)).name
     except Exception:
         name = "lab_report"
-    note = (
-        f"\n\n[Attached lab report image: {name}. "
-        "I cannot read the image directly. Please summarize what details you would need from a lab report "
-        "to answer this question, and ask the user to type any values shown.]"
+
+    extracted = ""
+    try:
+        extracted = extract_text_from_file(str(file_path))
+    except Exception as e:
+        logger.warning(f"OCR error for {name}: {e}")
+
+    base_msg = message or "Please review my attached lab report and explain the findings."
+
+    if extracted.strip():
+        logger.info(f"OCR extracted {len(extracted)} chars from {name}")
+        return (
+            f"{base_msg}\n\n"
+            f"--- BEGIN LAB REPORT TEXT (extracted via OCR from `{name}`) ---\n"
+            f"{extracted}\n"
+            f"--- END LAB REPORT TEXT ---\n\n"
+            "Please use the values above to: identify any abnormal results, "
+            "explain in plain English what each abnormal value means, suggest "
+            "likely causes, recommended follow-up tests and red flags."
+        )
+
+    return (
+        f"{base_msg}\n\n"
+        f"[Attached file `{name}` could not be read by OCR. "
+        "Please ask the user to type the key values from the report.]"
     )
-    return (message or "Please help me understand my attached lab report.") + note
 
 
 def _render_message_html(role: str, text: str, attachment_name: str | None = None) -> str:
@@ -477,7 +500,26 @@ def build_demo():
                 display_name = Path(path).name
             except Exception:
                 display_name = "uploaded file"
-            return path, f"📎 Attached: **{display_name}**"
+
+            # Try OCR right away so the user gets immediate feedback.
+            try:
+                preview = extract_text_from_file(path)
+            except Exception as e:
+                logger.warning(f"OCR preview failed: {e}")
+                preview = ""
+
+            if preview.strip():
+                snippet = preview.strip().splitlines()[0][:80]
+                status = (
+                    f"📎 **{display_name}** — OCR ✅ ({len(preview)} chars). "
+                    f"Preview: _{snippet}…_"
+                )
+            else:
+                status = (
+                    f"📎 **{display_name}** — OCR could not extract text. "
+                    "You can still send and describe the values."
+                )
+            return path, status
 
         def submit_message(message, region_val, history, pending_file, request: gr.Request):
             """Submit from the welcome view (also covers follow-ups)."""
