@@ -155,7 +155,16 @@ with gr.Blocks() as demo:
 
 
 if __name__ == "__main__":
+    # Print environment and versions to help debugging in Space logs
+    try:
+        print(f"SPACE_ID={os.getenv('SPACE_ID')}, SPACE_HOST={os.getenv('SPACE_HOST')}, SPACE_REPO_ID={os.getenv('SPACE_REPO_ID')}")
+        print(f"gradio={gr.__version__}, torch={torch.__version__}")
+    except Exception:
+        pass
+
+    # On Hugging Face Spaces, `share=True` is not supported and triggers warnings.
+    # Launch without `share` when running inside a Space; enable `share=True` for local debugging only.
     if os.getenv("SPACE_ID") or os.getenv("SPACE_HOST") or os.getenv("SPACE_REPO_ID"):
-        demo.launch(share=True)
+        demo.launch()
     else:
         demo.launch(share=True, server_name="0.0.0.0", server_port=int(os.getenv("PORT", "7860")))
