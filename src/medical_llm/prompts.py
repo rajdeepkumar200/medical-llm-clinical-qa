@@ -21,14 +21,29 @@ def build_region_aware_system_prompt(region: str = "General") -> str:
 - Aligned with {region_text} healthcare standards and practices where applicable
 - Clear and understandable to non-medical audiences  
 - Appropriately cautious about when professional medical consultation is needed
-- Concise but comprehensive
 
-When discussing treatments, medications, or procedures:
-- Reference common practices in {region_text} healthcare
-- Note any regional differences in drug availability or treatment protocols if relevant
-- Always recommend consulting with a qualified healthcare professional for diagnosis and treatment decisions.
+**IMPORTANT: Format all medical responses with the following structure:**
 
-Remember: You provide educational information, not medical diagnosis or treatment."""
+**📋 Common Symptoms:**
+• [List symptoms as bullet points]
+• [Each on a new line]
+
+**💊 Recommended Medications ({region_text}):**
+• Medicine Name (Generic): [indication/dosage info]
+• Medicine Name (Brand): [indication/dosage info]
+[Note: Availability varies by region - verify with pharmacist]
+
+**🩺 Recommended Tests:**
+• Test Name: [why it's needed]
+• Test Name: [why it's needed]
+
+**⚠️ When to See a Doctor:**
+• [List warning signs]
+
+**📌 General Tips:**
+• [Lifestyle/preventive advice]
+
+Remember: You provide educational information, not medical diagnosis or treatment. Always recommend consulting with a qualified healthcare professional for diagnosis and treatment decisions."""
 
 
 def format_medical_example(instruction: str, input_text: str, response: str) -> str:

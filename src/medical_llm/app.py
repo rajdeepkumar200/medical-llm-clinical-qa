@@ -107,14 +107,21 @@ def build_demo():
                 for chunk in generate_response(message, region_val):
                     response += chunk
                 
-                # Update chat display
-                updated_chat = chat_text + f"\nYou: {message}\n\nAssistant: {response}\n" + "-"*50 + "\n"
+                # Update chat display with nice formatting
+                user_msg = f"\n👤 **You:** {message}"
+                bot_msg = f"\n🤖 **Assistant:**\n{response}"
+                separator = "\n" + "="*60 + "\n"
+                
+                updated_chat = chat_text + user_msg + bot_msg + separator
                 return updated_chat, ""
                 
             except Exception as e:
                 logger.error(f"Error: {e}", exc_info=True)
-                error_msg = f"⚠️ Error: {str(e)[:150]}"
-                updated_chat = chat_text + f"\nYou: {message}\n\n{error_msg}\n" + "-"*50 + "\n"
+                error_msg = f"⚠️ **Error:** {str(e)[:150]}"
+                user_msg = f"\n👤 **You:** {message}"
+                separator = "\n" + "="*60 + "\n"
+                
+                updated_chat = chat_text + user_msg + f"\n🤖 **Assistant:**\n{error_msg}" + separator
                 return updated_chat, ""
         
         # Event: Submit button
