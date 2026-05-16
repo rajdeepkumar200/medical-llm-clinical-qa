@@ -36,13 +36,13 @@ def get_pipeline():
     return MODEL, TOKENIZER
 
 
-def process_message(message: str, file_obj: Optional[object], region: str, history: list) -> tuple[list, str, None]:
+def process_message(message: str, file_obj: Optional[object], region: str, history: list) -> tuple[list, str]:
     """Process user message and return updated history."""
     
     # Handle file upload
     if file_obj is not None:
         try:
-            file_path = file_obj.name
+            file_path = file_obj
             if file_path.endswith('.txt'):
                 with open(file_path, 'r') as f:
                     file_content = f.read()
@@ -55,7 +55,7 @@ def process_message(message: str, file_obj: Optional[object], region: str, histo
             message = message or "Error reading file"
     
     if not message.strip():
-        return history, "", None
+        return history, ""
     
     try:
         # Get pipeline
@@ -72,80 +72,54 @@ def process_message(message: str, file_obj: Optional[object], region: str, histo
         
         # Update history
         history.append([message, response])
-        return history, "", None
+        return history, ""
         
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
         error_msg = f"⚠️ Error: {str(e)[:150]}"
         history.append([message, error_msg])
-        return history, "", None
+        return history, ""
 
 
 def build_demo() -> gr.Blocks:
-    """Build ChatGPT-style medical assistant UI."""
-    with gr.Blocks(title="Clinical AI Assistant", theme=gr.themes.Soft(), css="""
-    #chat_box { height: 500px; overflow-y: auto; }
-    .message-box { padding: 16px; }
-    footer { display: none; }
-    """) as demo:
+    """Build medical assistant UI."""
+    with gr.Blocks(title="Clinical AI Assistant", theme=gr.themes.Soft()) as demo:
         
         # Header
-        gr.Markdown("# 🏥 Clinical AI Assistant\n*Powered by Medical LLM - Ask questions, upload reports, get region-aware guidance*")
+        gr.Markdown("# 🏥 Clinical AI Assistant")
+        gr.Markdown("*Ask medical questions, upload reports, get region-aware guidance*")
         
-        # Region selector (compact)
-        with gr.Row():
-            region = gr.Dropdown(REGIONS, value=REGION, label="🌍 Region", scale=2)
-            with gr.Column(scale=3):
-                gr.Markdown("**⚠️ For educational use. Consult healthcare professionals for diagnosis.**")
+        # Region selector
+        region = gr.Dropdown(REGIONS, value=REGION, label="Region")
         
         # Conversation display
-        chatbot = gr.Chatbot(label="Conversation", height=450, show_label=False)
+        chatbot = gr.Chatbot(label="Conversation", height=450)
         
-        # Input area - designed like ChatGPT
+        # Input area
         with gr.Row():
-            # Upload button with + sign
-            upload_btn = gr.UploadButton(
-                "➕",
-                file_count="single",
-                file_types=["text", ".pdf", ".png", ".jpg", ".jpeg"],
-                scale=1
-            )
-            
-            # Input textbox
-            msg_input = gr.Textbox(
-                placeholder="Ask a medical question or describe your symptoms...",
-                label=None,
-                lines=1,
-                scale=10,
-                show_label=False
-            )
-            
-            # Submit button (pill-shaped search icon)
-            submit_btn = gr.Button("🔍", scale=1)
+            msg_input = gr.Textbox(placeholder="Ask a medical question...", lines=1)
+            submit_btn = gr.Button("Submit")
         
-        # Hidden file state
-        file_state = gr.State(None)
+        # File upload
+        file_input = gr.File(label="Upload lab report or document")
+        
+        # Disclaimer
+        gr.Markdown("⚠️ **For educational use only.** Always consult healthcare professionals.")
         
         def handle_submit(user_msg, file_obj, region_val, chat_history):
-            return process_message(user_msg, file_obj, region_val, chat_history), "", None
-        
-        def handle_upload(files, chat_history):
-            if files:
-                file_state.value = files
-                return files
-            return None
+            return process_message(user_msg, file_obj, region_val, chat_history), ""
         
         # Events
         submit_btn.click(
             fn=handle_submit,
-            inputs=[msg_input, file_state, region, chatbot],
-            outputs=[chatbot, msg_input, file_state]
+            inputs=[msg_input, file_input, region, chatbot],
+            outputs=[chatbot, msg_input]
         )
         
         msg_input.submit(
             fn=handle_submit,
-            inputs=[msg_input, file_state, region, chatbot],
-            outputs=[chatbot, msg_input, file_state]
+            inputs=[msg_input, file_input, region, chatbot],
+            outputs=[chatbot, msg_input]
         )
         
         upload_btn.upload(
