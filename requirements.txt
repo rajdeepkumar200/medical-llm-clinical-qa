@@ -3,7 +3,9 @@ transformers>=4.41.0
 peft>=0.11.1
 accelerate>=0.31.0
 bitsandbytes>=0.43.1
-gradio>=4.36.0
+gradio==4.44.1
+fastapi==0.115.2
+starlette==0.38.6
 huggingface_hub<1.0
 sentencepiece>=0.2.0
 protobuf>=5.27.2
