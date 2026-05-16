@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import Optional
+from typing import Generator
 
 import gradio as gr  # type: ignore[import-not-found]
 
-from .config import ADAPTER_DIR, ADAPTER_REPO_ID, BASE_MODEL, REGION
+from .config import BASE_MODEL, ADAPTER_REPO_ID, ADAPTER_DIR, REGION
 from .infer import generate_answer, load_model, load_tokenizer
-from .prompts import build_region_aware_system_prompt
 from .nlp_processor import process_user_input, build_context_prompt
 
 logging.basicConfig(level=logging.INFO)
@@ -16,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 MODEL = None
 TOKENIZER = None
+CURRENT_REGION = REGION
 
 REGIONS = ["General", "United States", "United Kingdom", "Canada", "Australia", "New Zealand", "India", "Singapore", "Hong Kong", "Other"]
 
@@ -36,29 +36,15 @@ def get_pipeline():
     return MODEL, TOKENIZER
 
 
-def process_message(message: str, file_obj: Optional[object], region: str, history: list) -> tuple[list, str]:
-    """Process user message and return updated history."""
-    
-    # Handle file upload
-    if file_obj is not None:
-        try:
-            file_path = file_obj
-            if file_path.endswith('.txt'):
-                with open(file_path, 'r') as f:
-                    file_content = f.read()
-            else:
-                file_content = f"[{file_path.split('.')[-1].upper()} file uploaded]"
-            
-            message = f"{message}\n\n[DOCUMENT]\n{file_content}" if message.strip() else f"Please analyze this document:\n{file_content}"
-        except Exception as e:
-            logger.error(f"Error reading file: {e}")
-            message = message or "Error reading file"
+def generate_response(message: str, history: list) -> Generator[str, None, None]:
+    """Generate medical response as a stream."""
+    global CURRENT_REGION
     
     if not message.strip():
-        return history, ""
+        yield ""
+        return
     
     try:
-        # Get pipeline
         model, tokenizer = get_pipeline()
         
         # Process with NLP
@@ -66,61 +52,42 @@ def process_message(message: str, file_obj: Optional[object], region: str, histo
         enhanced_message = build_context_prompt(nlp_result, message)
         
         # Generate response
-        logger.info(f"Generating answer (Region: {region})")
-        response = generate_answer(model, tokenizer, enhanced_message, region=region)
+        logger.info(f"Generating answer (Region: {CURRENT_REGION})")
+        response = generate_answer(model, tokenizer, enhanced_message, region=CURRENT_REGION)
         logger.info("Answer generated successfully")
         
-        # Update history
-        history.append([message, response])
-        return history, ""
+        yield response
         
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
-        error_msg = f"⚠️ Error: {str(e)[:150]}"
-        history.append([message, error_msg])
-        return history, ""
+        yield f"⚠️ Error: {str(e)[:200]}"
 
 
-def build_demo() -> gr.Blocks:
-    """Build medical assistant UI."""
-    with gr.Blocks(title="Clinical AI Assistant", theme=gr.themes.Soft()) as demo:
-        
-        # Header
+def update_region(region: str):
+    global CURRENT_REGION
+    CURRENT_REGION = region
+    logger.info(f"Region updated to: {region}")
+
+
+def build_demo():
+    """Build medical assistant UI using ChatInterface."""
+    with gr.Blocks(title="Clinical AI Assistant") as demo:
         gr.Markdown("# 🏥 Clinical AI Assistant")
-        gr.Markdown("*Ask medical questions, upload reports, get region-aware guidance*")
+        gr.Markdown("Ask medical questions, upload reports, get region-aware guidance")
         
-        # Region selector
-        region = gr.Dropdown(REGIONS, value=REGION, label="Region")
-        
-        # Conversation display
-        chatbot = gr.Chatbot(label="Conversation", height=450)
-        
-        # Input area
         with gr.Row():
-            msg_input = gr.Textbox(placeholder="Ask a medical question...", lines=1)
-            submit_btn = gr.Button("Submit")
+            region_selector = gr.Dropdown(REGIONS, value=REGION, label="Region", scale=2)
         
-        # File upload
-        file_input = gr.File(label="Upload lab report or document")
-        
-        # Disclaimer
         gr.Markdown("⚠️ **For educational use only.** Always consult healthcare professionals.")
         
-        def handle_submit(user_msg, file_obj, region_val, chat_history):
-            return process_message(user_msg, file_obj, region_val, chat_history), ""
-        
-        # Events
-        submit_btn.click(
-            fn=handle_submit,
-            inputs=[msg_input, file_input, region, chatbot],
-            outputs=[chatbot, msg_input]
+        chat_interface = gr.ChatInterface(
+            fn=generate_response,
+            examples=["What are symptoms of flu?", "I have a headache and fever"],
+            title="",
+            description=""
         )
         
-        msg_input.submit(
-            fn=handle_submit,
-            inputs=[msg_input, file_input, region, chatbot],
-            outputs=[chatbot, msg_input]
-        )
+        region_selector.change(fn=update_region, inputs=[region_selector])
     
     return demo
 
