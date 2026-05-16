@@ -105,12 +105,13 @@ def build_demo() -> gr.Blocks:
         
         gr.Examples(
             examples=[
-                ("What are the common side effects of amoxicillin?", "General"),
-                ("How do I recognize signs of dehydration in a child?", "General"),
-                ("What is the first-line treatment for seasonal allergic rhinitis?", "General"),
+                ["What are the common side effects of amoxicillin?", "General"],
+                ["How do I recognize signs of dehydration in a child?", "General"],
+                ["What is the first-line treatment for seasonal allergic rhinitis?", "General"],
             ],
             inputs=[msg, region_selector],
-            label="Example Questions"
+            label="Example Questions",
+            cache_examples=False
         )
         
         def respond_with_region(message, history, region):
