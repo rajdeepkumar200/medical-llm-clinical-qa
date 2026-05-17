@@ -4,6 +4,7 @@ import os
 import logging
 import html
 import json
+import re
 from pathlib import Path
 from typing import Generator
 
@@ -231,6 +232,53 @@ def _attachment_ocr_text(attachment) -> str:
         return ""
 
 
+MEDICAL_REPORT_TERMS = (
+    "lab report", "laboratory", "pathology", "diagnostic", "patient", "specimen",
+    "collected", "reported", "reference range", "normal range", "result", "unit",
+    "prescription", "rx", "doctor", "hospital", "clinic", "clinical", "diagnosis",
+    "discharge summary", "medicine", "medication", "dose", "dosage", "tablet",
+    "capsule", "injection",
+    "flag", "blood", "serum", "plasma", "urine", "cbc", "complete blood count",
+    "hemoglobin", "haemoglobin", "wbc", "rbc", "platelet", "hematocrit", "mcv",
+    "mch", "mchc", "neutrophil", "lymphocyte", "eosinophil", "glucose", "hba1c",
+    "cholesterol", "hdl", "ldl", "triglyceride", "creatinine", "urea", "bun",
+    "egfr", "bilirubin", "albumin", "globulin", "protein", "alt", "ast", "sgpt",
+    "sgot", "alkaline phosphatase", "tsh", "t3", "t4", "ferritin", "vitamin d",
+    "sodium", "potassium", "chloride", "calcium", "crp", "esr",
+)
+
+MEDICAL_UNITS_PATTERN = re.compile(
+    r"\b\d+(?:\.\d+)?\s*(?:mg/dl|g/dl|mmol/l|µmol/l|umol/l|iu/l|u/l|ng/ml|pg/ml|"
+    r"miu/l|ml/min|cells?/u?l|/cumm|mg|mcg|µg|ml|%|x\s*10\^?\d+/l)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_probable_medical_report(text: str) -> bool:
+    cleaned = (text or "").strip()
+    if len(cleaned) < 30:
+        return False
+
+    lower = cleaned.lower()
+    hits = sum(1 for term in MEDICAL_REPORT_TERMS if term in lower)
+    unit_hits = len(MEDICAL_UNITS_PATTERN.findall(lower))
+    table_words = sum(1 for term in ("test", "result", "unit", "range", "reference") if term in lower)
+
+    if hits >= 4:
+        return True
+    if hits >= 2 and unit_hits >= 1:
+        return True
+    if table_words >= 3 and unit_hits >= 1:
+        return True
+    return False
+
+
+def _attachment_is_medical_report(attachment) -> bool:
+    if isinstance(attachment, dict):
+        return bool(attachment.get("is_medical_report"))
+    return _is_probable_medical_report(_attachment_ocr_text(attachment))
+
+
 def _mentions_uploaded_file(message: str) -> bool:
     text = (message or "").lower()
     return any(
@@ -249,7 +297,12 @@ def _mentions_uploaded_file(message: str) -> bool:
     )
 
 
-def _render_attach_chip(name: str, ocr_text: str, processing: bool = False) -> str:
+def _render_attach_chip(
+    name: str,
+    ocr_text: str,
+    processing: bool = False,
+    is_medical_report: bool | None = None,
+) -> str:
     safe_name = html.escape(name)
     if processing:
         return (
@@ -257,19 +310,31 @@ def _render_attach_chip(name: str, ocr_text: str, processing: bool = False) -> s
             '<span class="attach-icon">📎</span>'
             '<span class="attach-main">'
             f'<strong>{safe_name}</strong>'
-            '<em>Uploading and reading lab report…</em>'
+            '<em>Uploading and checking the image…</em>'
             '</span>'
             '<span class="attach-spinner">●</span>'
             '</div>'
         )
     if ocr_text.strip():
         preview = html.escape(ocr_text.replace("\n", " ")[:120])
+        if is_medical_report is False:
+            return (
+                '<div class="attach-card attach-warn">'
+                '<span class="attach-icon">📎</span>'
+                '<span class="attach-main">'
+                f'<strong>{safe_name}</strong>'
+                f'<em>Uploaded · OCR read {len(ocr_text)} characters · not a medical report</em>'
+                f'<small>{preview}</small>'
+                '</span>'
+                '<span class="attach-check">!</span>'
+                '</div>'
+            )
         return (
             '<div class="attach-card attach-ok">'
             '<span class="attach-icon">📎</span>'
             '<span class="attach-main">'
             f'<strong>{safe_name}</strong>'
-            f'<em>Uploaded · OCR read {len(ocr_text)} characters</em>'
+            f'<em>Uploaded · medical report detected · OCR read {len(ocr_text)} characters</em>'
             f'<small>{preview}</small>'
             '</span>'
             '<span class="attach-check">✓</span>'
@@ -299,6 +364,17 @@ def _attach_file_note(message: str, attachment) -> str:
 
     if extracted.strip():
         logger.info(f"OCR extracted {len(extracted)} chars from {name}")
+        if not _attachment_is_medical_report(attachment):
+            return (
+                "The user uploaded an image/PDF, and OCR extracted text from it, but the extracted "
+                "text does not look like a medical lab report or clinical report. Do not summarize it "
+                "as a lab report. Do not invent test results, symptoms, diagnoses, medicines, or values.\n\n"
+                f"User request: {base_msg}\n\n"
+                f"Uploaded file: `{name}`\n\n"
+                "Tell the user that the uploaded file does not appear to be a medical/lab report. "
+                "Ask them to upload a clear lab report, prescription, discharge summary, or type the "
+                "medical values they want explained."
+            )
         return (
             "The user uploaded an image/PDF lab report. You cannot see pixels directly, "
             "but OCR has extracted the text below. Treat this OCR text as the uploaded file content. "
@@ -914,15 +990,17 @@ def build_demo():
             except Exception as e:
                 logger.warning(f"OCR preview failed: {e}")
                 preview = ""
+            is_medical_report = _is_probable_medical_report(preview)
             attachment = {
                 "path": path,
                 "name": display_name,
                 "ocr_text": preview,
                 "ocr_chars": len(preview),
                 "ocr_ok": bool(preview.strip()),
+                "is_medical_report": is_medical_report,
             }
             return attachment, gr.update(
-                value=_render_attach_chip(display_name, preview),
+                value=_render_attach_chip(display_name, preview, is_medical_report=is_medical_report),
                 visible=True,
             )
 
@@ -959,6 +1037,35 @@ def build_demo():
                         "Please click the **+** button, choose your lab report image/PDF, "
                         "and wait until the attachment card says **Uploaded · OCR read ... characters**. "
                         "Then send your question again and I'll use the extracted report text."
+                    ),
+                    "attachment": None,
+                })
+                yield (
+                    gr.update(visible=False),
+                    gr.update(value=_render_conversation(history), visible=True),
+                    history,
+                    "",
+                    None,
+                    empty_chip,
+                    _render_sidebar(history),
+                )
+                return
+
+            if pending_file and _attachment_ocr_text(pending_file).strip() and not _attachment_is_medical_report(pending_file):
+                attachment_name = _attachment_display_name(pending_file)
+                history = list(history or [])
+                history.append({
+                    "role": "user",
+                    "content": message or "(attached file)",
+                    "attachment": attachment_name,
+                })
+                history.append({
+                    "role": "assistant",
+                    "content": (
+                        "I received the uploaded file, but the OCR text does **not** look like a medical "
+                        "lab report, prescription, discharge summary, or clinical document.\n\n"
+                        "I won’t summarize it as a lab report or invent test values. Please upload a clear "
+                        "medical report/lab report image, or type the medical values you want explained."
                     ),
                     "attachment": None,
                 })
