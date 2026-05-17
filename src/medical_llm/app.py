@@ -522,6 +522,22 @@ footer { display: none !important; }
     background: var(--panel-2); color: #f5b893;
     padding: 1px 6px; border-radius: 4px; font-size: 0.9em;
 }
+.response-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--accent);
+    background: var(--accent-soft);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 0.86rem;
+    font-weight: 500;
+    animation: response-pill-pulse 1.4s ease-in-out infinite;
+}
+@keyframes response-pill-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.78; transform: scale(0.98); }
+}
 .attach-chip {
     display: inline-block; background: var(--accent-soft); color: var(--accent);
     border: 1px solid var(--accent);
@@ -681,31 +697,6 @@ footer { display: none !important; }
     50% { opacity: 1; transform: scale(1.05); }
 }
 
-/* ----- Pill-shaped processing indicator ----- */
-#processing-pill {
-    position: fixed;
-    top: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 9999;
-    background: var(--panel-2);
-    color: var(--ink);
-    border: 1px solid var(--accent);
-    border-radius: 999px;
-    padding: 8px 18px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
-    animation: pill-pulse 1.6s ease-in-out infinite;
-    width: auto !important;
-    max-width: 90vw;
-}
-#processing-pill p { margin: 0 !important; color: var(--ink) !important; font-weight: 500; }
-@keyframes pill-pulse {
-    0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
-    50% { opacity: 0.8; transform: translateX(-50%) scale(0.97); }
-}
-
 /* ----- Hide Gradio's default progress overlay ----- */
 .gradio-container .progress-text,
 .gradio-container .progress-bar,
@@ -764,13 +755,6 @@ def build_demo():
         pending_file_state = gr.State(None)
         region_state = gr.State(REGION)
 
-        # ----- Floating processing pill -----
-        processing_pill = gr.Markdown(
-            "⚡ Generating response…",
-            elem_id="processing-pill",
-            visible=False,
-        )
-
         # ----- App shell: sidebar + main -----
         with gr.Row(elem_id="app-shell"):
 
@@ -828,7 +812,8 @@ def build_demo():
                     )
                     input_box = gr.Textbox(
                         placeholder="Ask anything medical — symptoms, medications, lab values…",
-                        lines=2,
+                        lines=1,
+                        max_lines=1,
                         show_label=False,
                         container=False,
                     )
@@ -942,7 +927,7 @@ def build_demo():
             # Reserve an empty assistant bubble that we'll fill as tokens stream in.
             history.append({
                 "role": "assistant",
-                "content": "▍",
+                "content": '<span class="response-pill">Generating response…</span>',
                 "attachment": None,
             })
 
@@ -1004,12 +989,6 @@ def build_demo():
         def fill_example(text):
             return text
 
-        def _show_pill():
-            return gr.update(visible=True)
-
-        def _hide_pill():
-            return gr.update(visible=False)
-
         # ----- Wire events -----
         submit_outputs = [
             welcome_block,
@@ -1024,14 +1003,10 @@ def build_demo():
         prog = "hidden"
 
         (
-            send_btn.click(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
-            .then(submit_message, submit_inputs, submit_outputs, api_name=False, show_progress=prog)
-            .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
+            send_btn.click(submit_message, submit_inputs, submit_outputs, api_name=False, show_progress=prog)
         )
         (
-            input_box.submit(_show_pill, None, processing_pill, api_name=False, show_progress=prog)
-            .then(submit_message, submit_inputs, submit_outputs, api_name=False, show_progress=prog)
-            .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
+            input_box.submit(submit_message, submit_inputs, submit_outputs, api_name=False, show_progress=prog)
         )
 
         (
