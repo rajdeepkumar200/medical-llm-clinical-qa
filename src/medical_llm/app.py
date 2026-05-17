@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import logging
 import html
+import json
 from pathlib import Path
 from typing import Generator
 
@@ -34,44 +35,85 @@ REGIONS = [
     "Other",
 ]
 
-# ISO country code → user-friendly region name used by the prompt builder
-COUNTRY_TO_REGION = {
-    "US": "United States",
-    "GB": "United Kingdom", "UK": "United Kingdom",
-    "CA": "Canada",
-    "AU": "Australia",
-    "NZ": "New Zealand",
-    "IN": "India",
-    "SG": "Singapore",
-    "HK": "Hong Kong",
+COUNTRY_BOUNDS = [
+    ("Singapore", 1.1, 1.5, 103.6, 104.1),
+    ("Hong Kong", 22.1, 22.6, 113.8, 114.5),
+    ("New Zealand", -48.5, -33.5, 165.5, 179.5),
+    ("Australia", -44.0, -10.0, 112.0, 154.5),
+    ("India", 6.0, 38.0, 68.0, 98.0),
+    ("United Kingdom", 49.0, 61.0, -9.0, 2.5),
+    ("Canada", 42.0, 84.0, -141.5, -52.0),
+    ("United States", 18.0, 72.0, -171.0, -66.0),
+]
+
+TIMEZONE_TO_REGION = {
+    "Asia/Kolkata": "India",
+    "Asia/Calcutta": "India",
+    "Europe/London": "United Kingdom",
+    "America/New_York": "United States",
+    "America/Chicago": "United States",
+    "America/Denver": "United States",
+    "America/Los_Angeles": "United States",
+    "America/Phoenix": "United States",
+    "America/Anchorage": "United States",
+    "Pacific/Honolulu": "United States",
+    "America/Toronto": "Canada",
+    "America/Vancouver": "Canada",
+    "America/Winnipeg": "Canada",
+    "America/Halifax": "Canada",
+    "Australia/Sydney": "Australia",
+    "Australia/Melbourne": "Australia",
+    "Australia/Brisbane": "Australia",
+    "Australia/Perth": "Australia",
+    "Pacific/Auckland": "New Zealand",
+    "Asia/Singapore": "Singapore",
+    "Asia/Hong_Kong": "Hong Kong",
 }
 
 
-def detect_region(request) -> str:
-    """Auto-detect a user's region from the browser Accept-Language header.
+def _region_label(region: str, source: str = "selected") -> str:
+    region = region if region in REGIONS else "General"
+    if region == "General":
+        return "📍 Country: **General** · select country for medicine names"
+    source_text = {
+        "gps": "GPS",
+        "timezone": "browser timezone",
+        "selected": "selected",
+    }.get(source, "selected")
+    return f"📍 Country: **{region}** · {source_text}"
 
-    Falls back to "General" when nothing useful is available. We deliberately
-    avoid external IP-geolocation calls to keep startup fast and offline-safe.
-    """
-    if request is None:
-        return "General"
-    try:
-        headers = getattr(request, "headers", {}) or {}
-        accept_lang = ""
-        # gr.Request.headers can be a dict-like
-        if hasattr(headers, "get"):
-            accept_lang = headers.get("accept-language", "") or headers.get(
-                "Accept-Language", ""
-            )
-        else:
-            accept_lang = str(headers)
-        accept_lang = accept_lang.upper()
-        for code, region in COUNTRY_TO_REGION.items():
-            if f"-{code}" in accept_lang or f"_{code}" in accept_lang:
-                return region
-    except Exception as e:
-        logger.warning(f"Region detection failed: {e}")
+
+def _region_from_coordinates(lat: float, lon: float) -> str:
+    for region, min_lat, max_lat, min_lon, max_lon in COUNTRY_BOUNDS:
+        if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
+            return region
     return "General"
+
+
+def detect_region_from_browser_payload(payload: str | None) -> tuple[str, str]:
+    if not payload:
+        return "General", "selected"
+    try:
+        data = json.loads(payload)
+    except Exception as e:
+        logger.warning(f"Browser region payload parse failed: {e}")
+        return "General", "selected"
+
+    try:
+        lat = data.get("lat")
+        lon = data.get("lon")
+        if lat is not None and lon is not None:
+            region = _region_from_coordinates(float(lat), float(lon))
+            if region != "General":
+                return region, "gps"
+    except Exception as e:
+        logger.warning(f"GPS region detection failed: {e}")
+
+    timezone = str(data.get("timezone") or "")
+    region = TIMEZONE_TO_REGION.get(timezone, "General")
+    if region != "General":
+        return region, "timezone"
+    return "General", "selected"
 
 
 EXAMPLE_PROMPTS = [
@@ -443,6 +485,20 @@ footer { display: none !important; }
 }
 #region-badge p { margin: 0 !important; color: var(--ink-soft) !important; }
 #region-badge strong { color: var(--accent); }
+#country-select {
+    min-width: 180px !important;
+    max-width: 210px !important;
+}
+#country-select label { display: none !important; }
+#country-select .wrap,
+#country-select input,
+#country-select select {
+    background: var(--panel-2) !important;
+    color: var(--ink) !important;
+    border-color: var(--border) !important;
+    border-radius: 999px !important;
+    font-size: 0.82rem !important;
+}
 
 #content-area {
     flex: 1 1 auto;
@@ -754,6 +810,7 @@ def build_demo():
         history_state = gr.State([])
         pending_file_state = gr.State(None)
         region_state = gr.State(REGION)
+        browser_region_payload = gr.Textbox(visible=False)
 
         # ----- App shell: sidebar + main -----
         with gr.Row(elem_id="app-shell"):
@@ -777,6 +834,13 @@ def build_demo():
                     region_badge = gr.Markdown(
                         "📍 Detecting your region…",
                         elem_id="region-badge",
+                    )
+                    country_select = gr.Dropdown(
+                        choices=REGIONS,
+                        value=REGION if REGION in REGIONS else "General",
+                        label="Country",
+                        elem_id="country-select",
+                        container=True,
                     )
 
                 # Content area: welcome hero OR chat messages (mutually exclusive)
@@ -863,10 +927,7 @@ def build_demo():
             )
 
         def submit_message(message, region_val, history, pending_file, request: gr.Request):
-            detected = detect_region(request)
-            if detected and detected != "General":
-                region_val = detected
-            elif not region_val:
+            if region_val not in REGIONS or not region_val:
                 region_val = "General"
 
             message = (message or "").strip()
@@ -1031,23 +1092,52 @@ def build_demo():
         for btn in example_btns:
             btn.click(fn=fill_example, inputs=[btn], outputs=[input_box], api_name=False, show_progress=prog)
 
-        # Auto-detect region on app load
-        def _init_region(request: gr.Request):
-            region = detect_region(request)
+        def _select_region(region):
+            region = region if region in REGIONS else "General"
             global CURRENT_REGION
             CURRENT_REGION = region
-            label = (
-                f"📍 Region: **{region}**"
-                if region != "General"
-                else "📍 Region: **General**"
-            )
-            return region, label
+            return region, _region_label(region, "selected")
+
+        def _init_region(payload):
+            region, source = detect_region_from_browser_payload(payload)
+            global CURRENT_REGION
+            CURRENT_REGION = region
+            label = _region_label(region, source)
+            return region, label, gr.update(value=region)
+
+        country_select.change(
+            fn=_select_region,
+            inputs=[country_select],
+            outputs=[region_state, region_badge],
+            api_name=False,
+            show_progress=prog,
+        )
 
         demo.load(
             fn=_init_region,
-            inputs=None,
-            outputs=[region_state, region_badge],
+            inputs=[browser_region_payload],
+            outputs=[region_state, region_badge, country_select],
             api_name=False,
+            js="""
+async () => {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  const payload = { timezone };
+  if (!navigator.geolocation) {
+    return [JSON.stringify(payload)];
+  }
+  return await new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        payload.lat = pos.coords.latitude;
+        payload.lon = pos.coords.longitude;
+        resolve([JSON.stringify(payload)]);
+      },
+      () => resolve([JSON.stringify(payload)]),
+      { enableHighAccuracy: false, timeout: 3500, maximumAge: 600000 }
+    );
+  });
+}
+""",
         )
 
     return demo
