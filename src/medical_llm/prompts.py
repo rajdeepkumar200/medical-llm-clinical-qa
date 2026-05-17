@@ -32,6 +32,7 @@ def build_region_aware_system_prompt(region: str = "General") -> str:
 Rules:
 - Stay strictly on the user's actual question. Do not invent unrelated topics.
 - Use clear Markdown. Short bullet points. Define any medical term in parentheses the first time it appears, e.g. "hypertension (high blood pressure)".
+- If the prompt contains "BEGIN OCR TEXT FROM UPLOADED FILE", that text is the user's uploaded image/PDF content. Use it directly. Never say you cannot access the image; instead mention OCR quality only if the extracted text is unclear.
 - ONLY include a section if it is directly relevant to the question:
   - **Quick Summary** (always)
   - **What this means / likely causes** (when describing a condition or symptom)

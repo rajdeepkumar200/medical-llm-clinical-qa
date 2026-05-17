@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import logging
+import html
 from pathlib import Path
 from typing import Generator
 
@@ -167,45 +168,114 @@ def update_region(region: str):
 
 # --- UI helpers -------------------------------------------------------------
 
-def _attach_file_note(message: str, file_path) -> str:
-    """Augment a message with OCR-extracted text from the uploaded file.
-
-    The base model is text-only, so we OCR the lab report and inject the
-    recognised text directly into the prompt. If OCR is unavailable or
-    yields nothing usable, we fall back to a graceful note asking the user
-    to type the values.
-    """
-    if not file_path:
-        return message
+def _attachment_display_name(attachment) -> str:
+    if isinstance(attachment, dict):
+        return str(attachment.get("name") or "uploaded file")
     try:
-        name = Path(str(file_path)).name
+        return Path(str(attachment)).name
     except Exception:
-        name = "lab_report"
+        return "uploaded file"
 
-    extracted = ""
+
+def _attachment_ocr_text(attachment) -> str:
+    if isinstance(attachment, dict):
+        return str(attachment.get("ocr_text") or "")
+    if not attachment:
+        return ""
     try:
-        extracted = extract_text_from_file(str(file_path))
+        return extract_text_from_file(str(attachment))
     except Exception as e:
-        logger.warning(f"OCR error for {name}: {e}")
+        logger.warning(f"OCR error for {_attachment_display_name(attachment)}: {e}")
+        return ""
+
+
+def _mentions_uploaded_file(message: str) -> bool:
+    text = (message or "").lower()
+    return any(
+        phrase in text
+        for phrase in (
+            "uploaded",
+            "upload",
+            "attached",
+            "attachment",
+            "image",
+            "photo",
+            "picture",
+            "lab report",
+            "report image",
+        )
+    )
+
+
+def _render_attach_chip(name: str, ocr_text: str, processing: bool = False) -> str:
+    safe_name = html.escape(name)
+    if processing:
+        return (
+            '<div class="attach-card attach-processing">'
+            '<span class="attach-icon">📎</span>'
+            '<span class="attach-main">'
+            f'<strong>{safe_name}</strong>'
+            '<em>Uploading and reading lab report…</em>'
+            '</span>'
+            '<span class="attach-spinner">●</span>'
+            '</div>'
+        )
+    if ocr_text.strip():
+        preview = html.escape(ocr_text.replace("\n", " ")[:120])
+        return (
+            '<div class="attach-card attach-ok">'
+            '<span class="attach-icon">📎</span>'
+            '<span class="attach-main">'
+            f'<strong>{safe_name}</strong>'
+            f'<em>Uploaded · OCR read {len(ocr_text)} characters</em>'
+            f'<small>{preview}</small>'
+            '</span>'
+            '<span class="attach-check">✓</span>'
+            '</div>'
+        )
+    return (
+        '<div class="attach-card attach-warn">'
+        '<span class="attach-icon">📎</span>'
+        '<span class="attach-main">'
+        f'<strong>{safe_name}</strong>'
+        '<em>Uploaded · OCR could not read text clearly</em>'
+        '<small>You can still ask, but typing key lab values will help.</small>'
+        '</span>'
+        '<span class="attach-check">!</span>'
+        '</div>'
+    )
+
+
+def _attach_file_note(message: str, attachment) -> str:
+    if not attachment:
+        return message
+
+    name = _attachment_display_name(attachment)
+    extracted = _attachment_ocr_text(attachment)
 
     base_msg = message or "Please review my attached lab report and explain the findings."
 
     if extracted.strip():
         logger.info(f"OCR extracted {len(extracted)} chars from {name}")
         return (
-            f"{base_msg}\n\n"
-            f"--- BEGIN LAB REPORT TEXT (extracted via OCR from `{name}`) ---\n"
+            "The user uploaded an image/PDF lab report. You cannot see pixels directly, "
+            "but OCR has extracted the text below. Treat this OCR text as the uploaded file content. "
+            "Do not say you do not have access to the image.\n\n"
+            f"User request: {base_msg}\n\n"
+            f"--- BEGIN OCR TEXT FROM UPLOADED FILE `{name}` ---\n"
             f"{extracted}\n"
-            f"--- END LAB REPORT TEXT ---\n\n"
-            "Please use the values above to: identify any abnormal results, "
-            "explain in plain English what each abnormal value means, suggest "
-            "likely causes, recommended follow-up tests and red flags."
+            f"--- END OCR TEXT FROM UPLOADED FILE `{name}` ---\n\n"
+            "Answer using the OCR text above. If values are visible, list them, flag likely abnormal "
+            "ones cautiously, explain what they may mean in plain English, mention red flags, and "
+            "recommend confirming with a clinician. If OCR text is messy, say which parts are unclear."
         )
 
     return (
-        f"{base_msg}\n\n"
-        f"[Attached file `{name}` could not be read by OCR. "
-        "Please ask the user to type the key values from the report.]"
+        "The user uploaded an image/PDF, but OCR could not extract readable text from it. "
+        "Do not claim the upload failed. Tell the user the file was received, explain that the text "
+        "could not be read clearly, and ask them to type the key lab values or upload a clearer image.\n\n"
+        f"User request: {base_msg}\n\n"
+        f"Uploaded file: `{name}`"
     )
 
 
@@ -518,27 +588,97 @@ footer { display: none !important; }
 
 /* ----- Inline attached-file chip (inside input-bar, above textarea) ----- */
 .attach-chip-row {
-    padding: 4px 4px 0 4px !important;
+    padding: 4px 4px 8px 4px !important;
     background: transparent !important; border: none !important;
 }
-.attach-chip-row p { margin: 0 !important; }
-.attach-chip-inline {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--accent-soft);
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    border-radius: 999px;
-    padding: 4px 12px;
-    font-size: 0.8rem;
-    line-height: 1.2;
-    max-width: 100%;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.attach-chip-row p { margin: 0 !important; width: 100%; }
+.attach-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: #20242b;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 10px 12px;
+    color: var(--ink);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
-.attach-chip-inline strong { color: var(--ink); font-weight: 600; }
-.attach-chip-inline.attach-warn {
-    background: rgba(179, 38, 30, 0.18);
-    color: #ef6b65;
-    border-color: #b3261e;
+.attach-card strong {
+    display: block;
+    color: #fff;
+    font-size: 0.88rem;
+    font-weight: 600;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.attach-card em {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 0.78rem;
+    font-style: normal;
+    margin-top: 2px;
+}
+.attach-card small {
+    display: block;
+    color: #b8b8b8;
+    font-size: 0.72rem;
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.attach-icon {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-soft);
+    border-radius: 8px;
+}
+.attach-main {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+.attach-ok {
+    border-color: rgba(54, 211, 153, 0.55);
+    background: rgba(54, 211, 153, 0.08);
+}
+.attach-warn {
+    border-color: rgba(245, 158, 11, 0.65);
+    background: rgba(245, 158, 11, 0.08);
+}
+.attach-processing {
+    border-color: rgba(201, 100, 66, 0.75);
+    background: rgba(201, 100, 66, 0.1);
+}
+.attach-check {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #07130f;
+    background: #36d399;
+}
+.attach-warn .attach-check {
+    color: #1f1300;
+    background: #f59e0b;
+}
+.attach-spinner {
+    color: var(--accent);
+    animation: attach-pulse 1s ease-in-out infinite;
+}
+@keyframes attach-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.05); }
 }
 
 /* ----- Pill-shaped processing indicator ----- */
@@ -683,6 +823,7 @@ def build_demo():
                     attach_chip = gr.Markdown(
                         "",
                         elem_classes=["attach-chip-row"],
+                        sanitize_html=False,
                         visible=False,
                     )
                     input_box = gr.Textbox(
@@ -695,6 +836,7 @@ def build_demo():
                         upload_btn = gr.UploadButton(
                             "+",
                             file_types=["image", ".pdf"],
+                            type="filepath",
                             elem_classes=["icon-btn"],
                         )
                         send_btn = gr.Button("➤", elem_classes=["send-btn"])
@@ -704,31 +846,36 @@ def build_demo():
                 )
 
         # =================== HANDLERS ===================
+        def _upload_processing(file_obj=None):
+            if file_obj is None:
+                return gr.update(value=_render_attach_chip("upload", "", processing=True), visible=True)
+            path = file_obj[0] if isinstance(file_obj, list) and file_obj else file_obj
+            name = _attachment_display_name(path)
+            return gr.update(value=_render_attach_chip(name, "", processing=True), visible=True)
+
         def on_upload(file_obj):
             empty = gr.update(value="", visible=False)
             if file_obj is None:
                 return None, empty
-            path = file_obj.name if hasattr(file_obj, "name") else str(file_obj)
-            try:
-                display_name = Path(path).name
-            except Exception:
-                display_name = "uploaded file"
+            path = file_obj[0] if isinstance(file_obj, list) and file_obj else file_obj
+            path = path.name if hasattr(path, "name") else str(path)
+            display_name = _attachment_display_name(path)
             try:
                 preview = extract_text_from_file(path)
             except Exception as e:
                 logger.warning(f"OCR preview failed: {e}")
                 preview = ""
-            if preview.strip():
-                chip = (
-                    f'<span class="attach-chip-inline">📎 <strong>{display_name}</strong> '
-                    f'· OCR ✅ {len(preview)} chars</span>'
-                )
-            else:
-                chip = (
-                    f'<span class="attach-chip-inline attach-warn">📎 <strong>{display_name}</strong> '
-                    f'· OCR could not extract text — describe values in your message</span>'
-                )
-            return path, gr.update(value=chip, visible=True)
+            attachment = {
+                "path": path,
+                "name": display_name,
+                "ocr_text": preview,
+                "ocr_chars": len(preview),
+                "ocr_ok": bool(preview.strip()),
+            }
+            return attachment, gr.update(
+                value=_render_attach_chip(display_name, preview),
+                visible=True,
+            )
 
         def submit_message(message, region_val, history, pending_file, request: gr.Request):
             detected = detect_region(request)
@@ -752,13 +899,38 @@ def build_demo():
                 )
                 return
 
+            if message and not pending_file and _mentions_uploaded_file(message):
+                history = list(history or [])
+                history.append({
+                    "role": "user",
+                    "content": message,
+                    "attachment": None,
+                })
+                history.append({
+                    "role": "assistant",
+                    "content": (
+                        "I don't see an attached file for this message yet.\n\n"
+                        "Please click the **+** button, choose your lab report image/PDF, "
+                        "and wait until the attachment card says **Uploaded · OCR read ... characters**. "
+                        "Then send your question again and I'll use the extracted report text."
+                    ),
+                    "attachment": None,
+                })
+                yield (
+                    gr.update(visible=False),
+                    gr.update(value=_render_conversation(history), visible=True),
+                    history,
+                    "",
+                    None,
+                    empty_chip,
+                    _render_sidebar(history),
+                )
+                return
+
             attachment_name = None
             full_msg = message
             if pending_file:
-                try:
-                    attachment_name = Path(str(pending_file)).name
-                except Exception:
-                    attachment_name = "lab_report"
+                attachment_name = _attachment_display_name(pending_file)
                 full_msg = _attach_file_note(message, pending_file)
 
             history = list(history or [])
@@ -862,12 +1034,21 @@ def build_demo():
             .then(_hide_pill, None, processing_pill, api_name=False, show_progress=prog)
         )
 
-        upload_btn.upload(
-            fn=on_upload,
-            inputs=[upload_btn],
-            outputs=[pending_file_state, attach_chip],
-            api_name=False,
-            show_progress=prog,
+        (
+            upload_btn.upload(
+                fn=_upload_processing,
+                inputs=[upload_btn],
+                outputs=[attach_chip],
+                api_name=False,
+                show_progress=prog,
+            )
+            .then(
+                fn=on_upload,
+                inputs=[upload_btn],
+                outputs=[pending_file_state, attach_chip],
+                api_name=False,
+                show_progress=prog,
+            )
         )
 
         new_chat_btn.click(fn=reset_chat, outputs=submit_outputs, api_name=False, show_progress=prog)
