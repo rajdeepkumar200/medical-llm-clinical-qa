@@ -10,121 +10,311 @@ app_file: app.py
 pinned: false
 ---
 
-# Medical Llama Clinical Q&A
+# 🩺 Clinical AI Assistant
 
-A fine-tuned LLM for region-aware medical Q&A. Uses `TinyLlama-1.1B-Chat-v1.0` with 4-bit QLoRA, PEFT, and TRL with Gradio interface. **Features region-specific healthcare context** (US, UK, Canada, India, etc.).
+> A fine-tuned, region-aware Medical Q&A system built with **QLoRA**, **PEFT**, and **Gradio**.
 
-## What’s in the repo
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://python.org)
+[![Gradio](https://img.shields.io/badge/Gradio-4.44.1-orange)](https://gradio.app)
+[![Hugging Face](https://img.shields.io/badge/HuggingFace-Spaces-yellow)](https://huggingface.co/spaces)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-- `src/medical_llm/train.py` trains the adapter.
-- `src/medical_llm/app.py` runs the chat interface.
-- `src/medical_llm/infer.py` handles loading and generation.
-- `src/medical_llm/config.py` keeps the knobs in one place.
-- `src/medical_llm/prompts.py` formats the medical instruction prompts.
+A lightweight, production-ready Medical LLM that answers clinical questions with **region-specific healthcare context**. Built on `TinyLlama-1.1B-Chat-v1.0` (or upgradeable to 7B models) with 4-bit QLoRA quantization for efficient fine-tuning and inference.
 
-## Why the setup looks this way
+---
 
-- The base model is small enough to run on modest hardware.
-- QLoRA keeps the adapter light and fast to publish.
-- The training script falls back to a small local medical set when the Hub dataset is unavailable, so the workflow still runs end to end.
-- The public adapter repo and Space make the project easy to share in a portfolio review.
+## ✨ Features
 
-## Region Customization
+| Feature | Description |
+|---------|-------------|
+| 🌍 **Region-Aware Responses** | Auto-detects or lets users select their country (US, UK, Canada, India, Australia, NZ, Singapore, Hong Kong) for localized healthcare context and medicine names. |
+| 🧠 **QLoRA Fine-Tuning** | Efficient adapter training with 4-bit quantization via PEFT + TRL. |
+| 💬 **Streaming Chat UI** | Dark-themed Gradio interface with real-time token streaming, sidebar history, and mobile responsiveness. |
+| 📄 **Lab Report OCR** | Upload images or PDFs; OCR extracts text for analysis with medical-report validation. |
+| 🔍 **Wikipedia Grounding** | Short/ambiguous queries are grounded with Wikipedia summaries to reduce hallucinations. |
+| 🏥 **NLP Symptom Detection** | Built-in medical term extraction and symptom-disease associations. |
+| ⚡ **CPU & GPU Support** | Runs on CPU with fallback; CUDA automatically enables 4-bit quantization. |
 
-The Space app includes a dropdown to select healthcare region:
-- **United States** (FDA standards, common US practices)
-- **United Kingdom** (NHS standards)
-- **Canada** (Health Canada protocols)
-- **Australia** (TGA standards)
-- Plus: New Zealand, India, Singapore, Hong Kong, or General
+---
 
-Responses will reference region-specific healthcare practices where applicable.
+## 📁 Project Structure
 
-## Using a Larger Model for Better Accuracy
-
-The default is TinyLlama (1.1B) for speed. For better accuracy, switch to 7B:
-
-```bash
-# Set environment variable or edit config.py:
-export BASE_MODEL="mistralai/Mistral-7B-Instruct-v0.2"
+```
+medical-llm/
+├── app.py                          # Hugging Face Spaces entry point
+├── requirements.txt                # Python dependencies
+├── pyproject.toml                  # Package metadata
+├── adapters/                       # Saved LoRA adapters
+├── outputs/                        # Training outputs
+├── hf_space_medical_llama/         # HF Space deployment files
+└── src/medical_llm/
+    ├── app.py                      # Gradio chat UI (dark theme, sidebar, streaming)
+    ├── train.py                    # QLoRA fine-tuning script
+    ├── infer.py                    # Model loading & text generation
+    ├── config.py                   # Central configuration & hyperparameters
+    ├── prompts.py                  # Chat prompt builders (region-aware)
+    ├── nlp_processor.py            # Symptom detection & medical NLP
+    ├── ocr.py                      # Lab report OCR (Tesseract + PyMuPDF)
+    └── web_context.py              # Wikipedia grounding for ambiguous queries
 ```
 
-**Trade-offs:**
-- 1.1B (current): Fast, runs on CPU, lower accuracy
-- 7B: Better accuracy, needs 16GB+ RAM or quantization
+---
 
-## Providing Custom Training Data
+## 🚀 Quick Start
 
-To fine-tune on your own medical Q&A data:
-
-1. **Create a CSV with this format:**
-   ```
-   instruction,input,output
-   What is hypertension,"",'High blood pressure occurs when...'
-   ```
-
-2. **Upload to Hugging Face Hub** as a dataset
-
-3. **Update config.py:**
-   ```python
-   DATASET_NAME = "your_username/your-medical-qa-dataset"
-   ADAPTER_REPO_ID = "your_username/medical-adapter"
-   ```
-
-4. **Train:**
-   ```bash
-   python -m src.medical_llm.train
-   ```
-
-5. **Deploy** - the adapter automatically pulls on inference
-
-## Adjusting Response Quality
-
-In `src/medical_llm/config.py`:
-- `MAX_NEW_TOKENS`: 256-512 (higher = longer responses)
-- `TEMPERATURE`: 0.7 (balanced), 0.3 (factual), 0.9 (creative)
-- `TOP_P`: 0.95 (diverse), 0.9 (balanced), 0.7 (focused)
-
-## Getting started (Local)
+### 1. Clone & Setup
 
 ```bash
+git clone https://github.com/rajdeepkumar200/medical-llm-clinical-qa.git
+cd medical-llm-clinical-qa
+
 python -m venv .venv
+# Windows
 .venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+
 pip install -r requirements.txt
 ```
 
-To train:
-
-```bash
-python -m src.medical_llm.train
-```
-
-To run the chat app:
+### 2. Run the Chat App
 
 ```bash
 python -m src.medical_llm.app
 ```
 
-## Published artifacts
+Open your browser to `http://localhost:7860`.
 
-- Model repo: `RajdeepSingh-ai/medical-llama-medical-qa`
-- Space repo: to be published from the space folder in this workspace
+### 3. Fine-Tune Your Own Adapter
 
-## Quick evaluation
+```bash
+python -m src.medical_llm.train
+```
 
-This is a small portfolio demo, so the evaluation is intentionally lightweight and honest.
+---
 
-- Training run: 1 epoch on 6 fallback medical examples
-- Final train loss: `3.417`
-- Mean token accuracy: `0.3951`
-- Runtime: `156.2s`
+## 🌍 Region Customization
 
-That is enough to show the pipeline works, the adapter trains, and the project is reproducible. It is not meant to be claimed as a clinical benchmark.
+The app automatically suggests a region based on browser timezone and GPS (with user permission), or you can manually select:
 
-## Portfolio note
+- **United States** — FDA terminology & generic names
+- **United Kingdom** — NHS terminology
+- **Canada** — Health Canada / provincial coverage notes
+- **Australia** — TGA / PBS references
+- **India** — Indian generic + optional brand-name examples
+- **New Zealand, Singapore, Hong Kong** — Localized terminology
 
-The point of this project is not just the model. It shows the full path from data formatting to adapter training to a public Hugging Face release and a live demo.
+Responses adapt medicine names, healthcare standards, and availability notes accordingly.
 
-## Safety note
+---
 
-This is a research and educational project only. Medical answers should always be reviewed by a qualified professional before real-world use.
+## 🧠 Model Configuration
+
+All settings live in `src/medical_llm/config.py`:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `BASE_MODEL` | `TinyLlama/TinyLlama-1.1B-Chat-v1.0` | Base LLM to fine-tune |
+| `MAX_NEW_TOKENS` | `220` | Response length (higher = longer answers) |
+| `TEMPERATURE` | `0.35` | Lower = more factual |
+| `TOP_P` | `0.9` | Nucleus sampling |
+| `REPETITION_PENALTY` | `1.15` | Reduces repetitive output |
+| `REGION` | `"General"` | Default healthcare region |
+
+### Switch to a Larger Model
+
+For better accuracy at the cost of more VRAM:
+
+```bash
+# Linux/macOS
+export BASE_MODEL="mistralai/Mistral-7B-Instruct-v0.2"
+
+# Windows PowerShell
+$env:BASE_MODEL="mistralai/Mistral-7B-Instruct-v0.2"
+```
+
+| Model | Speed | Accuracy | VRAM Required |
+|-------|-------|----------|---------------|
+| TinyLlama 1.1B | ⚡ Fast | Good | ~4GB (CPU works) |
+| Mistral 7B | Moderate | Better | ~16GB+ (GPU recommended) |
+
+---
+
+## 📊 Training with Custom Data
+
+### 1. Prepare Your Dataset
+
+Create a CSV with columns: `instruction`, `input`, `output`
+
+```csv
+instruction,input,output
+What are the symptoms of dehydration?,"","Signs include dry mouth, thirst, dark urine, dizziness, and fatigue. Severe dehydration requires urgent care."
+```
+
+### 2. Upload to Hugging Face Hub
+
+Upload as a dataset: `your-username/your-medical-qa-dataset`
+
+### 3. Update Config
+
+In `src/medical_llm/config.py`:
+
+```python
+DATASET_NAME = "your-username/your-medical-qa-dataset"
+ADAPTER_REPO_ID = "your-username/medical-adapter"
+```
+
+### 4. Train
+
+```bash
+python -m src.medical_llm.train --num-train-epochs 3 --learning-rate 2e-4
+```
+
+### 5. Deploy
+
+The adapter automatically loads from Hugging Face at inference time.
+
+---
+
+## 🔧 Advanced Usage
+
+### Environment Variables
+
+All `config.py` values can be overridden via environment variables:
+
+```bash
+export BASE_MODEL="mistralai/Mistral-7B-Instruct-v0.2"
+export MAX_NEW_TOKENS=512
+export TEMPERATURE=0.3
+export REGION="India"
+export DATASET_NAME="medalpaca/medalpaca-40k"
+```
+
+### Adjust Generation Quality
+
+| Parameter | Range | Effect |
+|-----------|-------|--------|
+| `MAX_NEW_TOKENS` | 128–512 | Longer responses vs. faster generation |
+| `TEMPERATURE` | 0.3–0.9 | 0.3 = very factual, 0.9 = more varied |
+| `TOP_P` | 0.7–0.95 | Lower = more focused, higher = more diverse |
+
+---
+
+## 📈 Evaluation
+
+Training metrics from the reference run:
+
+| Metric | Value |
+|--------|-------|
+| Dataset | 6 fallback medical examples (auto-fallback when Hub unavailable) |
+| Epochs | 1 |
+| Final Train Loss | `3.417` |
+| Mean Token Accuracy | `0.3951` |
+| Runtime | `156.2s` |
+
+> **Note:** This is a reproducible pipeline demo, not a clinical benchmark. The goal is to demonstrate end-to-end adapter training, not SOTA medical accuracy.
+
+---
+
+## 🏗️ Architecture Highlights
+
+### Hallucination Reduction
+
+- **Greedy decoding** (`do_sample=False`) for deterministic, factual medical answers
+- **Wikipedia grounding** for short/ambiguous queries (e.g., "diabetic symptoms")
+- **Deterministic clarifiers** appended after streaming: *"Did you mean [topic]?"*
+- **Medical report validation** — OCR text is scored against medical terms; non-medical uploads are rejected
+
+### Prompt Engineering
+
+The flexible prompt system in `prompts.py` does **not** force fixed sections. The model only includes a section if the user actually asked about that topic — preventing hallucinated drug names on unrelated queries.
+
+### OCR Pipeline
+
+- Supports `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tiff`, `.webp`, `.gif`, `.pdf`
+- Tesseract OCR with PyMuPDF fallback
+- Medical-report validation via keyword + unit-pattern scoring
+- Graceful degradation if OCR libraries are missing
+
+---
+
+## 🌐 Deployment
+
+### Hugging Face Spaces
+
+This project is ready to deploy on Hugging Face Spaces with Gradio:
+
+```bash
+# From the hf_space_medical_llama/ folder
+# Follow HF Spaces deployment instructions
+```
+
+### Docker (optional)
+
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "-m", "src.medical_llm.app"]
+```
+
+---
+
+## 🛡️ Safety Disclaimer
+
+> **This is a research and educational project only.**
+>
+> Medical answers generated by this system should **always** be reviewed by a qualified healthcare professional before any real-world diagnosis or treatment decisions. Do not rely on this tool for emergency medical situations.
+
+---
+
+## 📦 Dependencies
+
+Key libraries:
+
+- `torch` — PyTorch for model inference
+- `transformers>=4.41.0` — Hugging Face model loading
+- `peft>=0.11.1` — LoRA/QLoRA adapters
+- `trl>=0.9.6` — SFT training
+- `bitsandbytes>=0.43.1` — 4-bit quantization
+- `gradio==4.44.1` — Chat UI
+- `datasets>=2.19.0` — Dataset loading
+- `pytesseract>=0.3.10` — OCR
+- `pymupdf>=1.24.0` — PDF parsing
+
+See `requirements.txt` for the full list.
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) file.
+
+---
+
+## 🙏 Acknowledgments
+
+- [TinyLlama](https://github.com/jzhang38/TinyLlama) by Zhang et al. for the efficient base model
+- [Hugging Face](https://huggingface.co) for PEFT, TRL, and the Hub ecosystem
+- [MedAlpaca](https://huggingface.co/medalpaca) for the medical training dataset
+- [Wikipedia](https://www.wikipedia.org) for the open grounding API
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to open issues or PRs for:
+
+- Additional region support
+- Better hallucination mitigation
+- UI/UX improvements
+- Expanded medical NLP coverage
+
+---
+
+## 📬 Contact
+
+- **Author:** [Rajdeep Kumar](https://github.com/rajdeepkumar200)
+- **Hugging Face:** [@RajdeepSingh-ai](https://huggingface.co/RajdeepSingh-ai)
